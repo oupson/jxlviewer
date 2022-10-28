@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl/testdata" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl/third_party/brotli" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl/third_party/brotli/research/esaxx" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl/third_party/brotli/research/libdivsufsort" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl/third_party/googletest" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl/third_party/highway" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl/third_party/lcms" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl/third_party/libpng" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl/third_party/sjpeg" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl/third_party/skcms" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/app/src/main/cpp/libjxl/third_party/zlib" vcs="Git" />
+  </component>
+</project>
