@@ -6,6 +6,7 @@ plugins {
 android {
     namespace 'fr.oupson.jxlviewer'
     compileSdk 33
+    ndkVersion "25.1.8937393"
 
     defaultConfig {
         applicationId "fr.oupson.jxlviewer"
@@ -13,7 +14,6 @@ android {
         targetSdk 33
         versionCode 1
         versionName "0.1.0"
-        ndk "25.1.8937393"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
