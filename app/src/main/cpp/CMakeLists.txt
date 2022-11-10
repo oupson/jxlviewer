@@ -3,7 +3,7 @@
 
 # Sets the minimum version of CMake required to build the native library.
 
-cmake_minimum_required(VERSION 3.18.1)
+cmake_minimum_required(VERSION 3.22.1)
 
 # Declares and names the project.
 
@@ -14,72 +14,40 @@ project("jxlreader")
 # You can define multiple libraries, and CMake builds them for you.
 # Gradle automatically packages shared libraries with your APK.
 
+set(LIB_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party)
+set(LIB_DIR ${LIB_ROOT}/prebuilt/release/${CMAKE_ANDROID_ARCH_ABI})
+include_directories(${LIB_DIR}/include)
 
-include_directories(includes)
-add_library(jxl
-        SHARED
-        IMPORTED)
-
-add_library(brotlidec
-        SHARED
-        IMPORTED)
-
-add_library(brotlienc
-        SHARED
-        IMPORTED)
-
-add_library(brotlicommon
-        SHARED
-        IMPORTED)
-
-add_library(jxl_threads
-        SHARED
-        IMPORTED)
-
-set_target_properties( # Specifies the target library.
-        jxl
-
-        # Specifies the parameter you want to define.
-        PROPERTIES IMPORTED_LOCATION
-
-        # Provides the path to the library you want to import.
-        ${CMAKE_SOURCE_DIR}/../jniLibs/libjxl.so)
-
-set_target_properties( # Specifies the target library.
-        brotlidec
-
-        # Specifies the parameter you want to define.
-        PROPERTIES IMPORTED_LOCATION
-
-        # Provides the path to the library you want to import.
-        ${CMAKE_SOURCE_DIR}/../jniLibs/libbrotlidec.so)
-
-set_target_properties( # Specifies the target library.
-        brotlienc
-
-        # Specifies the parameter you want to define.
-        PROPERTIES IMPORTED_LOCATION
-
-        # Provides the path to the library you want to import.
-        ${CMAKE_SOURCE_DIR}/../jniLibs/libbrotlienc.so)
-
-set_target_properties( # Specifies the target library.
-        brotlicommon
-
-        # Specifies the parameter you want to define.
-        PROPERTIES IMPORTED_LOCATION
-
-        # Provides the path to the library you want to import.
-        ${CMAKE_SOURCE_DIR}/../jniLibs/libbrotlicommon.so)
-
-set_target_properties( # Specifies the target library.
-        jxl_threads
-
-        # Specifies the parameter you want to define.
-        PROPERTIES IMPORTED_LOCATION
-
-        # Provides the path to the library you want to import.
-        ${CMAKE_SOURCE_DIR}/../jniLibs/libjxl_threads.so)
+add_library(jxl_dec-static STATIC IMPORTED)
+set_target_properties(
+        jxl_dec-static
+        PROPERTIES
+        IMPORTED_LOCATION ${LIB_DIR}/libjxl_dec.a
+)
+add_library(jxl_threads-static STATIC IMPORTED)
+set_target_properties(
+        jxl_threads-static
+        PROPERTIES
+        IMPORTED_LOCATION ${LIB_DIR}/libjxl_threads.a
+)
+add_library(brotlidec-static STATIC IMPORTED)
+set_target_properties(
+        brotlidec-static
+        PROPERTIES
+        IMPORTED_LOCATION ${LIB_DIR}/libbrotlidec-static.a
+)
+add_library(brotlicommon-static STATIC IMPORTED)
+set_target_properties(
+        brotlicommon-static
+        PROPERTIES
+        IMPORTED_LOCATION ${LIB_DIR}/libbrotlicommon-static.a
+)
+add_library(hwy-static STATIC IMPORTED)
+set_target_properties(
+        hwy-static
+        PROPERTIES
+        IMPORTED_LOCATION ${LIB_DIR}/libhwy.a
+)
 
 add_library( # Sets the name of the library.
         jxlreader
@@ -90,19 +58,6 @@ add_library( # Sets the name of the library.
         # Provides a relative path to your source file(s).
         native-lib.cpp)
 
-# Searches for a specified prebuilt library and stores the path as a
-# variable. Because CMake includes system libraries in the search path by
-# default, you only need to specify the name of the public NDK library
-# you want to add. CMake verifies that the library exists before
-# completing its build.
-
-find_library( # Sets the name of the path variable.
-        log-lib
-
-        # Specifies the name of the NDK library that
-        # you want CMake to locate.
-        log)
-
 # Specifies libraries CMake should link to your target library. You
 # can link multiple libraries, such as libraries you define in this
 # build script, prebuilt third-party libraries, or system libraries.
@@ -112,5 +67,5 @@ target_link_libraries( # Specifies the target library.
 
         # Links the target library to the log library
         # included in the NDK.
-        ${log-lib}
-        jxl brotlidec brotlienc brotlicommon jxl_threads)
+        android jnigraphics log z
+        jxl_dec-static jxl_threads-static brotlicommon-static brotlidec-static hwy-static)

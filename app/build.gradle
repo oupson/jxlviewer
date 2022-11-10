@@ -13,6 +13,7 @@ android {
         targetSdk 33
         versionCode 1
         versionName "0.1.0"
+        ndk "25.1.8937393"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -50,15 +51,11 @@ android {
     externalNativeBuild {
         cmake {
             path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
         }
     }
     buildFeatures {
         viewBinding true
-    }
-    sourceSets {
-        main {
-            jniLibs.srcDirs = ['src/main/jniLibs']
-        }
     }
 }
 
