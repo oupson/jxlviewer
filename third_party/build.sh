@@ -28,29 +28,24 @@ function build_for_android {
                 exit 1
         fi
 
-        ABI_BUILD_DIR=${ROOT_DIR}/build/${ABI}
+        ABI_BUILD_DIR=${ROOT_DIR}/build/${BUILD_TYPE}/${ABI}/
+        ABI_INSTALL_DIR=${ROOT_DIR}/prebuilt/${BUILD_TYPE}/${ABI}
 
         ${CMAKE_DIR}/cmake -B${ABI_BUILD_DIR} \
                 -H. \
                 -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
                 -DANDROID_ABI=${ABI} \
-                -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=${ROOT_DIR}/prebuilt/${BUILD_TYPE_NAME}/${ABI}/ \
-                -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${ROOT_DIR}/prebuilt/${BUILD_TYPE_NAME}/${ABI}/ \
-                -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${ROOT_DIR}/prebuilt/${BUILD_TYPE_NAME}/${ABI}/ \
                 -DANDROID_PLATFORM=${ANDROID_SYSTEM_VERSION} \
-                -DCMAKE_ANDROID_STL=c++_static \
-                -DCMAKE_NDK_DIR=$NDK_DIR \
+                -DCMAKE_ANDROID_STL_TYPE=c++_static \
                 -DCMAKE_TOOLCHAIN_FILE=$NDK_DIR/build/cmake/android.toolchain.cmake \
                 -DANDROID_TOOLCHAIN=clang \
-                -DCMAKE_INSTALL_PREFIX=. \
+                -DCMAKE_INSTALL_PREFIX=${ABI_INSTALL_DIR} \
                 -DCMAKE_MAKE_PROGRAM=${CMAKE_DIR}/ninja \
                 -GNinja
 
         pushd ${ABI_BUILD_DIR}
-                cmake --build . -- -j5
+                ${CMAKE_DIR}/ninja && ${CMAKE_DIR}/ninja install
         popd
-
-        rm -rf ${ABI_BUILD_DIR}
 }
 
 

@@ -15,8 +15,9 @@ project("jxlreader")
 # Gradle automatically packages shared libraries with your APK.
 
 set(LIB_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party)
-set(LIB_DIR ${LIB_ROOT}/prebuilt/release/${CMAKE_ANDROID_ARCH_ABI})
-include_directories(${LIB_DIR}/include)
+set(CMAKE_BUILD_TYPE Release)
+set(LIB_DIR ${LIB_ROOT}/prebuilt/${CMAKE_BUILD_TYPE}/${CMAKE_ANDROID_ARCH_ABI}/lib)
+include_directories(${LIB_DIR}/../include)
 
 add_library(jxl_dec-static STATIC IMPORTED)
 set_target_properties(
