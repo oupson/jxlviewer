@@ -121,11 +121,11 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
             env->CallVoidMethod(btm, copyPixelsFromBufferMethodId, buffer);
 
             auto btmDrawable = env->NewObject(bitmapDrawableClass, bitmapDrawableMethodID, btm);
-
+            uint32_t num = (info.animation.tps_numerator == 0) ? 1 : info.animation.tps_numerator;
             env->CallVoidMethod(drawable, addDrawableMethodID, btmDrawable,
                                 (int) (frameHeader.duration * 1000 *
                                        info.animation.tps_denominator /
-                                       info.animation.tps_numerator));
+                                       num));
         } else if (status == JXL_DEC_SUCCESS) {
             return drawable;
         } else if (status == JXL_DEC_FRAME) {
