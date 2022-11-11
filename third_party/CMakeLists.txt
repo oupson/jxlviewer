@@ -1,12 +1,11 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(comitton C CXX ASM)
+project(JXLVIEWER LANGUAGES C CXX)
 include(FetchContent)
 
 FetchContent_Declare(
   libjxl
   GIT_REPOSITORY https://github.com/libjxl/libjxl
   GIT_TAG        v0.7.0
-  PATCH_COMMAND  ./deps.sh
 )
 
 set(JPEGXL_VERSION "v0.7.0" CACHE INTERNAL "")
