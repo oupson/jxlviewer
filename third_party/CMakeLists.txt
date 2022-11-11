@@ -24,12 +24,3 @@ set(JPEGXL_ENABLE_TOOLS OFF CACHE INTERNAL "")
 set(JPEGXL_ENABLE_BENCHMARK OFF CACHE INTERNAL "")
 
 FetchContent_MakeAvailable(libjxl)
-
-execute_process(
-  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/copy_headers.sh "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}include"
-  WORKING_DIRECTORY "${libjxl_SOURCE_DIR}/lib/include"
-)
-execute_process(
-  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/copy_headers.sh "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}include"
-  WORKING_DIRECTORY "${libjxl_BINARY_DIR}/lib/include"
-)
