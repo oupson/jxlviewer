@@ -23,11 +23,13 @@ android {
                 targets "jxlreader"
 
             }
+        }
 
-            ndk {
-                // Specifies the ABI configurations of your native
-                // libraries Gradle should build and package with your app.
-                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
+        splits {
+            abi {
+                enable true
+                include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+                universalApk true
             }
         }
     }
