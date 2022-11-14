@@ -13,7 +13,6 @@ project("jxlreader")
 # You can define multiple libraries, and CMake builds them for you.
 # Gradle automatically packages shared libraries with your APK.
 
-
 add_subdirectory(third_party)
 
 add_library( # Sets the name of the library.
