@@ -6,10 +6,10 @@
 #include <jni.h>
 #include <android/log.h>
 
-#include "jxl/decode.h"
-#include "jxl/decode_cxx.h"
-#include "jxl/resizable_parallel_runner.h"
-#include "jxl/resizable_parallel_runner_cxx.h"
+#include <jxl/decode.h>
+#include <jxl/decode_cxx.h>
+#include <jxl/resizable_parallel_runner.h>
+#include <jxl/resizable_parallel_runner_cxx.h>
 
 jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     size_t xsize;

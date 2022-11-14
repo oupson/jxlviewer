@@ -15,71 +15,7 @@ project("jxlreader")
 # Gradle automatically packages shared libraries with your APK.
 
 
-include_directories(includes)
-add_library(jxl
-        SHARED
-        IMPORTED)
-
-add_library(brotlidec
-        SHARED
-        IMPORTED)
-
-add_library(brotlienc
-        SHARED
-        IMPORTED)
-
-add_library(brotlicommon
-        SHARED
-        IMPORTED)
-
-add_library(jxl_threads
-        SHARED
-        IMPORTED)
-
-set_target_properties( # Specifies the target library.
-        jxl
-
-        # Specifies the parameter you want to define.
-        PROPERTIES IMPORTED_LOCATION
-
-        # Provides the path to the library you want to import.
-        ${CMAKE_SOURCE_DIR}/../jniLibs/libjxl.so)
-
-set_target_properties( # Specifies the target library.
-        brotlidec
-
-        # Specifies the parameter you want to define.
-        PROPERTIES IMPORTED_LOCATION
-
-        # Provides the path to the library you want to import.
-        ${CMAKE_SOURCE_DIR}/../jniLibs/libbrotlidec.so)
-
-set_target_properties( # Specifies the target library.
-        brotlienc
-
-        # Specifies the parameter you want to define.
-        PROPERTIES IMPORTED_LOCATION
-
-        # Provides the path to the library you want to import.
-        ${CMAKE_SOURCE_DIR}/../jniLibs/libbrotlienc.so)
-
-set_target_properties( # Specifies the target library.
-        brotlicommon
-
-        # Specifies the parameter you want to define.
-        PROPERTIES IMPORTED_LOCATION
-
-        # Provides the path to the library you want to import.
-        ${CMAKE_SOURCE_DIR}/../jniLibs/libbrotlicommon.so)
-
-set_target_properties( # Specifies the target library.
-        jxl_threads
-
-        # Specifies the parameter you want to define.
-        PROPERTIES IMPORTED_LOCATION
-
-        # Provides the path to the library you want to import.
-        ${CMAKE_SOURCE_DIR}/../jniLibs/libjxl_threads.so)
+add_subdirectory(third_party)
 
 add_library( # Sets the name of the library.
         jxlreader
@@ -112,5 +48,5 @@ target_link_libraries( # Specifies the target library.
 
         # Links the target library to the log library
         # included in the NDK.
-        ${log-lib}
-        jxl brotlidec brotlienc brotlicommon jxl_threads)
+        android jnigraphics log z
+        jxl_dec jxl_threads)
