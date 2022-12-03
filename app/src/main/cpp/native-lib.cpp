@@ -11,10 +11,11 @@
 #include <jxl/resizable_parallel_runner.h>
 #include <jxl/resizable_parallel_runner_cxx.h>
 
+#include <android/bitmap.h>
+
 jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     size_t xsize;
     size_t ysize;
-    std::vector<uint8_t> pixels{};
 
     auto drawableClass = env->FindClass("android/graphics/drawable/AnimationDrawable");
     jmethodID drawableMethodID = env->GetMethodID(drawableClass, "<init>", "()V");
@@ -29,8 +30,6 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     auto bitmapClass = env->FindClass("android/graphics/Bitmap");
     auto createBitmapMethodId = env->GetStaticMethodID(bitmapClass, "createBitmap",
                                                        "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;");
-    auto copyPixelsFromBufferMethodId = env->GetMethodID(bitmapClass, "copyPixelsFromBuffer",
-                                                         "(Ljava/nio/Buffer;)V");
 
     jstring configName = env->NewStringUTF("ARGB_8888");
     jclass bitmapConfigClass = env->FindClass("android/graphics/Bitmap$Config");
@@ -64,6 +63,8 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     JxlDecoderSetInput(dec.get(), jxl, size);
     JxlDecoderCloseInput(dec.get());
 
+    jobject btm = nullptr;
+
     for (;;) {
         JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
 
@@ -91,6 +92,7 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
                                     "JxlDecoderImageOutBufferSize failed");
                 return nullptr;
             }
+
             if (buffer_size != xsize * ysize * 4) {
                 __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
                                     "Invalid out buffer size %" PRIu64 " %" PRIu64,
@@ -98,27 +100,24 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
                                     static_cast<uint64_t>(xsize * ysize * 4));
                 return nullptr;
             }
-            pixels.resize(xsize * ysize * 4);
-            void *pixels_buffer = (void *) pixels.data();
-            size_t pixels_buffer_size = pixels.size() * sizeof(uint8_t);
+
+            btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId, (int) xsize,
+                                              (int) ysize, bitmapConfig);
+
+            uint8_t *bitmap_buffer;
+            AndroidBitmap_lockPixels(env, btm, reinterpret_cast<void **>(&bitmap_buffer));
+
+            size_t pixels_buffer_size = buffer_size * sizeof(uint8_t);
+
             if (JXL_DEC_SUCCESS != JxlDecoderSetImageOutBuffer(dec.get(), &format,
-                                                               pixels_buffer,
+                                                               bitmap_buffer,
                                                                pixels_buffer_size)) {
                 __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
                                     "JxlDecoderSetImageOutBuffer failed");
                 return nullptr;
             }
         } else if (status == JXL_DEC_FULL_IMAGE) {
-            void *pixels_buffer = (void *) pixels.data();
-
-            // Nothing to do. Do not yet return. If the image is an animation, more
-            // full frames may be decoded. This example only keeps the last one.
-            auto buffer = env->NewDirectByteBuffer(pixels_buffer, xsize * ysize * 4);
-
-            auto btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId, (int) xsize,
-                                                   (int) ysize, bitmapConfig);
-
-            env->CallVoidMethod(btm, copyPixelsFromBufferMethodId, buffer);
+            AndroidBitmap_unlockPixels(env, btm);
 
             auto btmDrawable = env->NewObject(bitmapDrawableClass, bitmapDrawableMethodID, btm);
             uint32_t num = (info.animation.tps_numerator == 0) ? 1 : info.animation.tps_numerator;
