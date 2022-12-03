@@ -140,9 +140,9 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
 }
 
 extern "C" JNIEXPORT jobject JNICALL
-Java_fr_oupson_jxlviewer_JxlDecoder_loadJxl(
+Java_fr_oupson_libjxl_JxlDecoder_loadJxl(
         JNIEnv *env,
-        jobject /* this */,
+        jclass /* clazz */,
         jbyteArray data) {
     auto size = env->GetArrayLength(data);
     auto dataPtr = env->GetByteArrayElements(data, nullptr);
