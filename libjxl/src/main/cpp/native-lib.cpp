@@ -13,6 +13,38 @@
 
 #include <android/bitmap.h>
 
+inline uint32_t min(uint32_t a, uint32_t b) {
+    return (b < a) ? b : a;
+}
+
+/**
+* Multiplies a single channel value with passed alpha. Values are already shifted
+* and can be directly ORed back into uint32_t structure.
+*/
+inline uint32_t premultiply_channel_value(const uint32_t pixel, const uint8_t offset,
+                                          const uint32_t alpha) {
+    uint32_t multipliedValue = (((pixel >> offset) & 0xFF) * alpha) / 255;
+    return min(multipliedValue, 255) << offset;
+}
+
+/**
+*   This premultiplies alpha value in the bitmap. Android expects its bitmaps to have alpha premultiplied for optimization -
+*   this means that instead of ARGB values of (128, 255, 255, 255) the bitmap needs to store (128, 128, 128, 128). Color channels
+*   are multiplied with alpha value (0.0 .. 1.0).
+*/
+inline void premultiply_bitmap_alpha(const uint32_t bitmapHeight, const uint32_t bitmapWidth,
+                                     uint32_t *bitmapBuffer) {
+    const uint32_t pixels = bitmapHeight * bitmapWidth;
+    for (uint32_t i = 0; i < pixels; i++) {
+        const auto alpha = (uint32_t) ((bitmapBuffer[i] >> 24) & 0xFF);
+
+        bitmapBuffer[i] = (bitmapBuffer[i] & 0xFF000000) |
+                          premultiply_channel_value(bitmapBuffer[i], 16, alpha) |
+                          premultiply_channel_value(bitmapBuffer[i], 8, alpha) |
+                          premultiply_channel_value(bitmapBuffer[i], 0, alpha);
+    }
+}
+
 jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     size_t xsize;
     size_t ysize;
@@ -65,6 +97,8 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
 
     jobject btm = nullptr;
 
+    uint8_t *bitmap_buffer;
+
     for (;;) {
         JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
 
@@ -104,7 +138,7 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
             btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId, (int) xsize,
                                               (int) ysize, bitmapConfig);
 
-            uint8_t *bitmap_buffer;
+
             AndroidBitmap_lockPixels(env, btm, reinterpret_cast<void **>(&bitmap_buffer));
 
             size_t pixels_buffer_size = buffer_size * sizeof(uint8_t);
@@ -117,6 +151,11 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
                 return nullptr;
             }
         } else if (status == JXL_DEC_FULL_IMAGE) {
+            // Android need images with alpha to be premultiplied, otherwise it produce strange results.
+            if (info.alpha_bits && !info.alpha_premultiplied) {
+                premultiply_bitmap_alpha(info.ysize, info.xsize, (uint32_t *) bitmap_buffer);
+            }
+
             AndroidBitmap_unlockPixels(env, btm);
 
             auto btmDrawable = env->NewObject(bitmapDrawableClass, bitmapDrawableMethodID, btm);
