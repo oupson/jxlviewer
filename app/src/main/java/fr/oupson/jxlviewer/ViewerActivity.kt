@@ -7,6 +7,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import fr.oupson.jxlviewer.databinding.ActivityViewBinding
+import fr.oupson.libjxl.JxlDecoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,12 +32,12 @@ class ViewerActivity : ComponentActivity() {
                 ?: resources.assets.open("logo.jxl")
 
             val image = input.use {
-                JxlDecoder().loadJxl(it.readBytes())
+                JxlDecoder.loadJxl(it.readBytes())
             }
 
             withContext(Dispatchers.Main) {
                 binding.test.setImageDrawable(image)
-                image.start()
+                image?.start()
             }
         }
     }
