@@ -1,0 +1,3 @@
+An application that allow you to view your jpeg-xl files on your device !
+
+It support animated and non-animated images.
