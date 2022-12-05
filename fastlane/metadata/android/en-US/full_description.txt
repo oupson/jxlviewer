@@ -1,3 +1,5 @@
-An application that allow you to view your jpeg-xl files on your device !
+An application that allow you to view your JPEG XL files on your device !
 
 It support animated and non-animated images.
+
+JPEG XL is a raster-graphics file format, it is designed to outperform existing raster formats.
