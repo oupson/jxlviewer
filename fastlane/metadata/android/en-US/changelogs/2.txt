@@ -1,0 +1,4 @@
+Changed:
+- Improve bitmap loading.
+Fixed:
+- Fix issue with alpha.
