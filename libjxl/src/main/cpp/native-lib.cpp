@@ -11,39 +11,9 @@
 #include <jxl/resizable_parallel_runner.h>
 #include <jxl/resizable_parallel_runner_cxx.h>
 
+#include <skcms.h>
+
 #include <android/bitmap.h>
-
-inline uint32_t min(uint32_t a, uint32_t b) {
-    return (b < a) ? b : a;
-}
-
-/**
-* Multiplies a single channel value with passed alpha. Values are already shifted
-* and can be directly ORed back into uint32_t structure.
-*/
-inline uint32_t premultiply_channel_value(const uint32_t pixel, const uint8_t offset,
-                                          const uint32_t alpha) {
-    uint32_t multipliedValue = (((pixel >> offset) & 0xFF) * alpha) / 255;
-    return min(multipliedValue, 255) << offset;
-}
-
-/**
-*   This premultiplies alpha value in the bitmap. Android expects its bitmaps to have alpha premultiplied for optimization -
-*   this means that instead of ARGB values of (128, 255, 255, 255) the bitmap needs to store (128, 128, 128, 128). Color channels
-*   are multiplied with alpha value (0.0 .. 1.0).
-*/
-inline void premultiply_bitmap_alpha(const uint32_t bitmapHeight, const uint32_t bitmapWidth,
-                                     uint32_t *bitmapBuffer) {
-    const uint32_t pixels = bitmapHeight * bitmapWidth;
-    for (uint32_t i = 0; i < pixels; i++) {
-        const auto alpha = (uint32_t) ((bitmapBuffer[i] >> 24) & 0xFF);
-
-        bitmapBuffer[i] = (bitmapBuffer[i] & 0xFF000000) |
-                          premultiply_channel_value(bitmapBuffer[i], 16, alpha) |
-                          premultiply_channel_value(bitmapBuffer[i], 8, alpha) |
-                          premultiply_channel_value(bitmapBuffer[i], 0, alpha);
-    }
-}
 
 jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     size_t xsize;
@@ -76,7 +46,8 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     auto dec = JxlDecoderMake(nullptr);
     if (JXL_DEC_SUCCESS !=
         JxlDecoderSubscribeEvents(dec.get(), JXL_DEC_BASIC_INFO |
-                                             JXL_DEC_FULL_IMAGE | JXL_DEC_FRAME)) {
+                                             JXL_DEC_FULL_IMAGE | JXL_DEC_FRAME |
+                                             JXL_DEC_COLOR_ENCODING)) {
         __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "JxlDecoderSubscribeEvents failed");
         return nullptr;
     }
@@ -98,6 +69,8 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     jobject btm = nullptr;
 
     uint8_t *bitmap_buffer;
+    uint8_t *icc_buf;
+    skcms_ICCProfile icc;
 
     for (;;) {
         JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
@@ -118,6 +91,36 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
             JxlResizableParallelRunnerSetThreads(
                     runner.get(),
                     JxlResizableParallelRunnerSuggestThreads(info.xsize, info.ysize));
+        } else if (status == JXL_DEC_COLOR_ENCODING) {
+            size_t icc_size;
+            if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(
+                    dec.get(),
+                    nullptr, // UNUSED
+                    JXL_COLOR_PROFILE_TARGET_DATA, &icc_size)) {
+                __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
+                                    "JxlDecoderGetICCProfileSize failed");
+                return nullptr;
+            }
+
+            icc_buf = (uint8_t *) malloc(icc_size);
+
+            if (JXL_DEC_SUCCESS !=
+                JxlDecoderGetColorAsICCProfile(dec.get(),
+                                               nullptr, // UNUSED
+                                               JXL_COLOR_PROFILE_TARGET_DATA,
+                                               icc_buf, icc_size)) {
+                __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
+                                    "JxlDecoderGetColorAsICCProfile failed");
+
+                return nullptr;
+            }
+
+            if (!skcms_Parse(icc_buf, icc_size,
+                             &icc)) {
+                __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
+                                    "Invalid ICC profile from JXL image decoder");
+                return nullptr;
+            }
         } else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
             size_t buffer_size;
             if (JXL_DEC_SUCCESS !=
@@ -151,10 +154,18 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
                 return nullptr;
             }
         } else if (status == JXL_DEC_FULL_IMAGE) {
-            // Android need images with alpha to be premultiplied, otherwise it produce strange results.
-            if (info.alpha_bits && !info.alpha_premultiplied) {
-                premultiply_bitmap_alpha(info.ysize, info.xsize, (uint32_t *) bitmap_buffer);
-            }
+            skcms_Transform(
+                    (void *) bitmap_buffer,
+                    skcms_PixelFormat_RGBA_8888,
+                    info.alpha_premultiplied ? skcms_AlphaFormat_PremulAsEncoded
+                                             : skcms_AlphaFormat_Unpremul,
+                    &icc,
+                    (void *) bitmap_buffer,
+                    skcms_PixelFormat_RGBA_8888,
+                    skcms_AlphaFormat_PremulAsEncoded,// Android need images with alpha to be premultiplied, otherwise it produce strange results.
+                    skcms_sRGB_profile(),
+                    xsize * ysize
+            );
 
             AndroidBitmap_unlockPixels(env, btm);
 
@@ -165,6 +176,7 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
                                        info.animation.tps_denominator /
                                        num));
         } else if (status == JXL_DEC_SUCCESS) {
+            free(icc_buf);
             return drawable;
         } else if (status == JXL_DEC_FRAME) {
             if (JXL_DEC_SUCCESS != JxlDecoderGetFrameHeader(dec.get(), &frameHeader)) {
@@ -176,6 +188,7 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
             return nullptr;
         }
     }
+
 }
 
 extern "C" JNIEXPORT jobject JNICALL
