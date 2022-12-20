@@ -1,5 +1,6 @@
 package fr.oupson.jxlviewer
 
+import android.graphics.drawable.AnimationDrawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.core.view.WindowCompat
@@ -11,6 +12,9 @@ import fr.oupson.libjxl.JxlDecoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 class ViewerActivity : ComponentActivity() {
     private lateinit var binding: ActivityViewBinding
@@ -28,12 +32,21 @@ class ViewerActivity : ComponentActivity() {
     // Load image from intent if opened from file picker / other apps, or load default image.
     private fun loadImage() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val input = intent?.data?.let { contentResolver.openInputStream(it) }
-                ?: resources.assets.open("logo.jxl")
+            val image = intent?.data?.let {
+                when (it.scheme) {
+                    "https" -> {
+                        val conn = (URL(it.toString()).openConnection() as HttpURLConnection)
+                        conn.connect()
 
-            val image = input.use {
-                JxlDecoder.loadJxl(it.readBytes())
+                        val img = loadImage(conn.inputStream)
+                        conn.disconnect()
+
+                        img
+                    }
+                    else -> loadImage(contentResolver.openInputStream(it)!!)
+                }
             }
+                ?: loadImage(resources.assets.open("logo.jxl"))
 
             withContext(Dispatchers.Main) {
                 binding.test.setImageDrawable(image)
@@ -41,6 +54,11 @@ class ViewerActivity : ComponentActivity() {
             }
         }
     }
+
+    private fun loadImage(input: InputStream): AnimationDrawable? = input.use {
+        JxlDecoder.loadJxl(it.readBytes())
+    }
+
 
     // Enable immersive mode.
     private fun hideSystemBars() {
