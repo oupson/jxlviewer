@@ -1,0 +1,4 @@
+Added:
+- Open image from URL.
+Fixed:
+- Load images with icc profiles.
