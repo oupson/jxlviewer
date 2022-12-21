@@ -1,5 +1,3 @@
-#define LOG_TAG "native-jxl"
-
 #include <cinttypes>
 
 #include <vector>
@@ -14,6 +12,9 @@
 #include <skcms.h>
 
 #include <android/bitmap.h>
+
+#include "jxlviewer_consts.h"
+#include "ICCProfile.h"
 
 jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     size_t xsize;
@@ -69,8 +70,7 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     jobject btm = nullptr;
 
     uint8_t *bitmap_buffer;
-    uint8_t *icc_buf;
-    skcms_ICCProfile icc;
+    ICCProfile icc_profile;
 
     for (;;) {
         JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
@@ -92,33 +92,7 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
                     runner.get(),
                     JxlResizableParallelRunnerSuggestThreads(info.xsize, info.ysize));
         } else if (status == JXL_DEC_COLOR_ENCODING) {
-            size_t icc_size;
-            if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(
-                    dec.get(),
-                    nullptr, // UNUSED
-                    JXL_COLOR_PROFILE_TARGET_DATA, &icc_size)) {
-                __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
-                                    "JxlDecoderGetICCProfileSize failed");
-                return nullptr;
-            }
-
-            icc_buf = (uint8_t *) malloc(icc_size);
-
-            if (JXL_DEC_SUCCESS !=
-                JxlDecoderGetColorAsICCProfile(dec.get(),
-                                               nullptr, // UNUSED
-                                               JXL_COLOR_PROFILE_TARGET_DATA,
-                                               icc_buf, icc_size)) {
-                __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
-                                    "JxlDecoderGetColorAsICCProfile failed");
-
-                return nullptr;
-            }
-
-            if (!skcms_Parse(icc_buf, icc_size,
-                             &icc)) {
-                __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
-                                    "Invalid ICC profile from JXL image decoder");
+            if (!icc_profile.parse(dec.get())) {
                 return nullptr;
             }
         } else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
@@ -154,18 +128,7 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
                 return nullptr;
             }
         } else if (status == JXL_DEC_FULL_IMAGE) {
-            skcms_Transform(
-                    (void *) bitmap_buffer,
-                    skcms_PixelFormat_RGBA_8888,
-                    info.alpha_premultiplied ? skcms_AlphaFormat_PremulAsEncoded
-                                             : skcms_AlphaFormat_Unpremul,
-                    &icc,
-                    (void *) bitmap_buffer,
-                    skcms_PixelFormat_RGBA_8888,
-                    skcms_AlphaFormat_PremulAsEncoded,// Android need images with alpha to be premultiplied, otherwise it produce strange results.
-                    skcms_sRGB_profile(),
-                    xsize * ysize
-            );
+            icc_profile.transform(bitmap_buffer, xsize, ysize, info.alpha_premultiplied);
 
             AndroidBitmap_unlockPixels(env, btm);
 
@@ -176,7 +139,6 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
                                        info.animation.tps_denominator /
                                        num));
         } else if (status == JXL_DEC_SUCCESS) {
-            free(icc_buf);
             return drawable;
         } else if (status == JXL_DEC_FRAME) {
             if (JXL_DEC_SUCCESS != JxlDecoderGetFrameHeader(dec.get(), &frameHeader)) {
