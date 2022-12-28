@@ -18,8 +18,8 @@
             android:name=".ViewerActivity"
             android:exported="true">
             <intent-filter>
+                <!-- Intent filter to open the app from the launcher -->
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
@@ -28,15 +28,18 @@
                 android:value="" />
 
             <intent-filter tools:ignore="AppLinkUrlError">
+                <!-- Intent filter to open files with image/jxl mime type (does not exist in android for the moment) -->
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.BROWSABLE" />
                 <category android:name="android.intent.category.DEFAULT" />
 
+                <!-- Like this will ever happen -->
                 <data android:mimeType="image/jxl" />
             </intent-filter>
 
             <intent-filter>
+                <!-- Intent filter to open jxl files from the internet (`https://.+/.+\.jxl`). -->
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -49,6 +52,7 @@
             </intent-filter>
 
             <intent-filter tools:ignore="AppLinkUrlError">
+                <!-- Intent filter to open jxl files from the storage -->
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -60,16 +64,19 @@
                 <data android:host="*" />
 
                 <data android:mimeType="*/*" />
-                <data android:pathSuffix=".jxl" />
+                <data android:pathPattern=".*\\.jxl" />
+                <data android:pathPattern=".*\\..*\\.jxl" />
+                <data android:pathPattern=".*\\..*\\..*\\.jxl" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.jxl" />
             </intent-filter>
 
             <intent-filter tools:ignore="AppLinkUrlError">
+                <!-- Intent filter to open jxl files from the storage, when no extension is provided -->
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.BROWSABLE" />
                 <category android:name="android.intent.category.DEFAULT" />
 
-                <data android:scheme="file" />
                 <data android:scheme="content" />
 
                 <data android:mimeType="application/octet-stream" />
