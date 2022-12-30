@@ -1,0 +1,2 @@
+Fixed:
+- App was registered to open non-jxl files on older devices.
