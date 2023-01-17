@@ -15,6 +15,8 @@
 
 #include "jxlviewer_consts.h"
 #include "ICCProfile.h"
+#include "Exception.h"
+
 
 jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     size_t xsize;
@@ -45,17 +47,15 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     auto runner = JxlResizableParallelRunnerMake(nullptr);
 
     auto dec = JxlDecoderMake(nullptr);
-    if (JXL_DEC_SUCCESS !=
-        JxlDecoderSubscribeEvents(dec.get(), JXL_DEC_BASIC_INFO |
-                                             JXL_DEC_FULL_IMAGE | JXL_DEC_FRAME |
-                                             JXL_DEC_COLOR_ENCODING)) {
+    if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec.get(),
+                                                     JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE |
+                                                     JXL_DEC_FRAME | JXL_DEC_COLOR_ENCODING)) {
         __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "JxlDecoderSubscribeEvents failed");
         return nullptr;
     }
 
-    if (JXL_DEC_SUCCESS != JxlDecoderSetParallelRunner(dec.get(),
-                                                       JxlResizableParallelRunner,
-                                                       runner.get())) {
+    if (JXL_DEC_SUCCESS !=
+        JxlDecoderSetParallelRunner(dec.get(), JxlResizableParallelRunner, runner.get())) {
         __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "JxlDecoderSetParallelRunner failed");
         return nullptr;
     }
@@ -76,31 +76,30 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
         JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
 
         if (status == JXL_DEC_ERROR) {
-            __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Decoder error");
+            jxlviewer::throwNewError(env, DECODER_FAILED_ERROR);
             return nullptr;
         } else if (status == JXL_DEC_NEED_MORE_INPUT) {
-            __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Error, already provided all input");
+            jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
             return nullptr;
         } else if (status == JXL_DEC_BASIC_INFO) {
             if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(dec.get(), &info)) {
-                __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "JxlDecoderGetBasicInfo");
+                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetBasicInfo");
                 return nullptr;
             }
             xsize = info.xsize;
             ysize = info.ysize;
-            JxlResizableParallelRunnerSetThreads(
-                    runner.get(),
-                    JxlResizableParallelRunnerSuggestThreads(info.xsize, info.ysize));
+            JxlResizableParallelRunnerSetThreads(runner.get(),
+                                                 JxlResizableParallelRunnerSuggestThreads(
+                                                         info.xsize, info.ysize));
         } else if (status == JXL_DEC_COLOR_ENCODING) {
-            if (!icc_profile.parse(dec.get())) {
+            if (!icc_profile.parse(env, dec.get())) {
                 return nullptr;
             }
         } else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
             size_t buffer_size;
-            if (JXL_DEC_SUCCESS !=
-                JxlDecoderImageOutBufferSize(dec.get(), &format, &buffer_size)) {
-                __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
-                                    "JxlDecoderImageOutBufferSize failed");
+            if (JXL_DEC_SUCCESS != JxlDecoderImageOutBufferSize(dec.get(), &format, &buffer_size)) {
+                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
+                                         "JxlDecoderImageOutBufferSize");
                 return nullptr;
             }
 
@@ -120,11 +119,10 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
 
             size_t pixels_buffer_size = buffer_size * sizeof(uint8_t);
 
-            if (JXL_DEC_SUCCESS != JxlDecoderSetImageOutBuffer(dec.get(), &format,
-                                                               bitmap_buffer,
+            if (JXL_DEC_SUCCESS != JxlDecoderSetImageOutBuffer(dec.get(), &format, bitmap_buffer,
                                                                pixels_buffer_size)) {
-                __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
-                                    "JxlDecoderSetImageOutBuffer failed");
+                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
+                                         "JxlDecoderSetImageOutBuffer");
                 return nullptr;
             }
         } else if (status == JXL_DEC_FULL_IMAGE) {
@@ -136,13 +134,12 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
             uint32_t num = (info.animation.tps_numerator == 0) ? 1 : info.animation.tps_numerator;
             env->CallVoidMethod(drawable, addDrawableMethodID, btmDrawable,
                                 (int) (frameHeader.duration * 1000 *
-                                       info.animation.tps_denominator /
-                                       num));
+                                       info.animation.tps_denominator / num));
         } else if (status == JXL_DEC_SUCCESS) {
             return drawable;
         } else if (status == JXL_DEC_FRAME) {
             if (JXL_DEC_SUCCESS != JxlDecoderGetFrameHeader(dec.get(), &frameHeader)) {
-                __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "JxlDecoderGetFrameHeader failed");
+                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetFrameHeader");
                 return nullptr;
             }
         } else {
@@ -154,14 +151,13 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
 }
 
 extern "C" JNIEXPORT jobject JNICALL
-Java_fr_oupson_libjxl_JxlDecoder_loadJxl(
-        JNIEnv *env,
-        jclass /* clazz */,
-        jbyteArray data) {
+Java_fr_oupson_libjxl_JxlDecoder_loadJxl(JNIEnv *env, jclass /* clazz */, jbyteArray data) {
     auto size = env->GetArrayLength(data);
     auto dataPtr = env->GetByteArrayElements(data, nullptr);
     auto result = DecodeJpegXlOneShot(env, (uint8_t *) dataPtr, size);
 
     env->ReleaseByteArrayElements(data, dataPtr, 0);
+
     return result;
 }
+

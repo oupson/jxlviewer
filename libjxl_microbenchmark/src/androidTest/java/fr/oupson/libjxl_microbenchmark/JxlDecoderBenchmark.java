@@ -17,18 +17,19 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import fr.oupson.libjxl.JxlDecoder;
+import fr.oupson.libjxl.exceptions.DecodeError;
 
 @RunWith(AndroidJUnit4.class)
 public class JxlDecoderBenchmark {
     @Rule
     public BenchmarkRule benchmarkRule = new BenchmarkRule();
 
-    private void loadImage(byte[] content) {
+    private void loadImage(byte[] content) throws DecodeError, ClassNotFoundException {
         AnimationDrawable animationDrawable = JxlDecoder.loadJxl(content);
     }
 
     @Test
-    public void benchmarkDecodeLogo() throws IOException {
+    public void benchmarkDecodeLogo() throws IOException, DecodeError, ClassNotFoundException {
         final BenchmarkState state = benchmarkRule.getState();
 
         state.pauseTiming();
@@ -49,7 +50,7 @@ public class JxlDecoderBenchmark {
     }
 
     @Test
-    public void benchmarkDecodeDidi() throws IOException {
+    public void benchmarkDecodeDidi() throws IOException, DecodeError, ClassNotFoundException {
         final BenchmarkState state = benchmarkRule.getState();
 
         state.pauseTiming();
@@ -70,7 +71,7 @@ public class JxlDecoderBenchmark {
     }
 
     @Test
-    public void benchmarkDecodeFerris() throws IOException {
+    public void benchmarkDecodeFerris() throws IOException, DecodeError, ClassNotFoundException {
         final BenchmarkState state = benchmarkRule.getState();
 
         state.pauseTiming();
