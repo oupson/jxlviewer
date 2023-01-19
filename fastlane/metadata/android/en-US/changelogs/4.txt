@@ -1,2 +1,4 @@
+Added:
+- Error message when image failed to load.
 Fixed:
 - App was registered to open non-jxl files on older devices.

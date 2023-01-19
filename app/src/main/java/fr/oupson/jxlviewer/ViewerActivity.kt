@@ -2,6 +2,8 @@ package fr.oupson.jxlviewer
 
 import android.graphics.drawable.AnimationDrawable
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -17,6 +19,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class ViewerActivity : ComponentActivity() {
+    companion object {
+        private const val TAG = "ViewerActivity"
+    }
+
     private lateinit var binding: ActivityViewBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,25 +38,33 @@ class ViewerActivity : ComponentActivity() {
     // Load image from intent if opened from file picker / other apps, or load default image.
     private fun loadImage() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val image = intent?.data?.let {
-                when (it.scheme) {
-                    "https" -> {
-                        val conn = (URL(it.toString()).openConnection() as HttpURLConnection)
-                        conn.connect()
+            try {
+                val image = intent?.data?.let {
+                    when (it.scheme) {
+                        "https" -> {
+                            val conn = (URL(it.toString()).openConnection() as HttpURLConnection)
+                            conn.connect()
 
-                        val img = loadImage(conn.inputStream)
-                        conn.disconnect()
+                            val img = loadImage(conn.inputStream)
+                            conn.disconnect()
 
-                        img
+                            img
+                        }
+                        else -> loadImage(contentResolver.openInputStream(it)!!)
                     }
-                    else -> loadImage(contentResolver.openInputStream(it)!!)
                 }
-            }
-                ?: loadImage(resources.assets.open("logo.jxl"))
+                    ?: loadImage(resources.assets.open("logo.jxl"))
 
-            withContext(Dispatchers.Main) {
-                binding.test.setImageDrawable(image)
-                image?.start()
+                withContext(Dispatchers.Main) {
+                    binding.test.setImageDrawable(image)
+                    image?.start()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load image", e)
+                withContext(Dispatchers.Main) {
+                    binding.test.setImageResource(R.drawable.baseline_error_outline_24)
+                    Toast.makeText(this@ViewerActivity, R.string.image_load_failed, Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -58,7 +72,6 @@ class ViewerActivity : ComponentActivity() {
     private fun loadImage(input: InputStream): AnimationDrawable? = input.use {
         JxlDecoder.loadJxl(it.readBytes())
     }
-
 
     // Enable immersive mode.
     private fun hideSystemBars() {

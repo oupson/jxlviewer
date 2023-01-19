@@ -8,6 +8,7 @@
 #include <jxl/decode.h>
 
 #include <skcms.h>
+#include <jni.h>
 
 class ICCProfile {
 private:
@@ -19,7 +20,7 @@ public:
 
     ~ICCProfile();
 
-    bool parse(JxlDecoder *dec) noexcept;
+    bool parse(JNIEnv *env, JxlDecoder *dec) noexcept;
 
     bool transform(void *bitmap_buffer, size_t width, size_t height, bool alpha_premultiplied) const noexcept;
 };

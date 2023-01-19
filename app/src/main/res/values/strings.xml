@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">Jpeg XL Viewer</string>
+
+    <!-- ViewerActivity -->
+    <string name="image_load_failed">Failed to load image</string>
 </resources>

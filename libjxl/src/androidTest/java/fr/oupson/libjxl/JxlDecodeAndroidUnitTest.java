@@ -12,6 +12,8 @@ import org.junit.Test;
 import java.io.IOException;
 import java.io.InputStream;
 
+import fr.oupson.libjxl.exceptions.DecodeError;
+
 public class JxlDecodeAndroidUnitTest {
     @Test
     public void decode_LogoShouldNotFail() throws IOException {
@@ -88,5 +90,40 @@ public class JxlDecodeAndroidUnitTest {
         }
     }
 
-    // TODO ADD TEST FOR EXCEPTIONS WHEN IMPLEMENTING
+    @Test
+    public void decode_WithoutEnoughInputShouldFail() throws IOException {
+        Context context = ApplicationProvider.getApplicationContext();
+        InputStream input = context.getResources().getAssets().open("ferris.jxl");
+
+        byte[] content = new byte[100];
+
+        int size = input.read(content);
+        input.close();
+
+        // As input is marked finished, it is a decoder error and not an NeedMoreInputException
+        // TODO: fixme when implementing stream loading
+        DecodeError error = Assert.assertThrows(DecodeError.class, () -> {
+            AnimationDrawable result = JxlDecoder.loadJxl(content);
+        });
+
+        Assert.assertEquals(DecodeError.DecodeErrorType.DecoderFailedError, error.getErrorType());
+    }
+
+    @Test
+    public void decode_PngShouldFail() throws IOException {
+        Context context = ApplicationProvider.getApplicationContext();
+        InputStream input = context.getResources().getAssets().open("android.png");
+
+        byte[] content = new byte[input.available()];
+
+        int size = input.read(content);
+        input.close();
+
+        DecodeError error =  Assert.assertThrows(DecodeError.class, () -> {
+            AnimationDrawable result = JxlDecoder.loadJxl(content);
+        });
+        Assert.assertEquals(DecodeError.DecodeErrorType.DecoderFailedError, error.getErrorType());
+    }
+
+    // TODO: find a way to test icc profile errors
 }
