@@ -19,7 +19,7 @@ jobs:
         run: ./gradlew lintDebug
 
       - name: Upload html test report
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: libjxl-lint.html
           path: libjxl/build/reports/lint-results-debug.html
@@ -36,7 +36,7 @@ jobs:
         run: ./gradlew test
 
       - name: Upload test report
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: unit_test_report
           path: libjxl/build/reports/tests/testDebugUnitTest/
@@ -90,7 +90,7 @@ jobs:
           script: ./gradlew connectedCheck
 
       - name: Upload test report
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: instrumentation_test_report
           path: libjxl/build/reports/androidTests/connected/
