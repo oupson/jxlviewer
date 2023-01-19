@@ -19,8 +19,10 @@ jobs:
       - name: Upload html test report
         uses: actions/upload-artifact@v2
         with:
-          name: lint.html
-          path: {app,libjxl}/build/reports/lint-results-debug.html
+          - name: libjxl-lint.html
+            path: libjxl/build/reports/lint-results-debug.html
+          - name: app-lint.html
+            path: app/build/reports/lint-results-debug.html
   unit-test:
     needs: [lint]
     runs-on: ubuntu-latest
