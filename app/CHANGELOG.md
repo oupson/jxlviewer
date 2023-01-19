@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added:
 - Error message when image failed to load.
+### Changed
+- Updated libjxl to v0.8.0
 ### Fixed
 - App was registered to open non-jxl files on older devices.
 
