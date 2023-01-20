@@ -19,6 +19,7 @@ jobs:
         with:
           java-version: 11
           cache: 'gradle'
+          distribution: 'temurin'
 
       - name: Run lint
         run: ./gradlew lintDebug
@@ -41,6 +42,7 @@ jobs:
         with:
           java-version: 11
           cache: 'gradle'
+          distribution: 'temurin'
 
       - name: Run tests
         run: ./gradlew test
@@ -67,6 +69,7 @@ jobs:
         with:
           java-version: 11
           cache: 'gradle'
+          distribution: 'temurin'
 
       - name: AVD cache
         uses: actions/cache@v3
