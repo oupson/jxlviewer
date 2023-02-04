@@ -1,0 +1,2 @@
+Changed:
+- Updated libjxl to v0.8.1
