@@ -144,7 +144,7 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
                 return nullptr;
             }
         } else {
-            __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Unknown decoder status");
+            jxlviewer::throwNewError(env, OTHER_ERROR_TYPE, "Unknown decoder status");
             return nullptr;
         }
     }
