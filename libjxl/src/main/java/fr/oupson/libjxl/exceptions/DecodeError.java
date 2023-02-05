@@ -6,6 +6,7 @@ public class DecodeError extends Exception {
         ICCProfileError,
         MethodCallFailedError,
         NeedMoreInputError,
+        OtherError,
         UnknownError
     }
 
@@ -19,6 +20,8 @@ public class DecodeError extends Exception {
                 return DecodeErrorType.MethodCallFailedError;
             case 3:
                 return DecodeErrorType.NeedMoreInputError;
+            case 4:
+                return DecodeErrorType.OtherError;
             default:
                 return DecodeErrorType.UnknownError;
         }

@@ -11,6 +11,7 @@
 #define ICC_PROFILE_ERROR (1)
 #define METHOD_CALL_FAILED_ERROR (2)
 #define NEED_MORE_INPUT_ERROR (3)
+#define OTHER_ERROR_TYPE (4)
 
 namespace jxlviewer {
     jint throwNewError(JNIEnv *env, int errorType);

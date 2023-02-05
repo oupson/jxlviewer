@@ -50,13 +50,13 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec.get(),
                                                      JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE |
                                                      JXL_DEC_FRAME | JXL_DEC_COLOR_ENCODING)) {
-        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "JxlDecoderSubscribeEvents failed");
+        jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSubscribeEvents");
         return nullptr;
     }
 
     if (JXL_DEC_SUCCESS !=
         JxlDecoderSetParallelRunner(dec.get(), JxlResizableParallelRunner, runner.get())) {
-        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "JxlDecoderSetParallelRunner failed");
+        jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetParallelRunner");
         return nullptr;
     }
 
@@ -104,10 +104,11 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
             }
 
             if (buffer_size != xsize * ysize * 4) {
-                __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
-                                    "Invalid out buffer size %" PRIu64 " %" PRIu64,
-                                    static_cast<uint64_t>(buffer_size),
-                                    static_cast<uint64_t>(xsize * ysize * 4));
+                char error_buffer[256];
+                snprintf(error_buffer, 256, "Invalid bitmap buffer size (expected %d, got %d)",
+                         xsize * ysize * 4, buffer_size);
+                jxlviewer::throwNewError(env, OTHER_ERROR_TYPE,
+                                         error_buffer);
                 return nullptr;
             }
 
@@ -147,7 +148,6 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
             return nullptr;
         }
     }
-
 }
 
 extern "C" JNIEXPORT jobject JNICALL
