@@ -1,4 +1,7 @@
+#include "ImageOutCallbackData.h"
+
 #include <cinttypes>
+
 
 #include <vector>
 #include <jni.h>
@@ -14,14 +17,10 @@
 #include <android/bitmap.h>
 
 #include "jxlviewer_consts.h"
-#include "ICCProfile.h"
 #include "Exception.h"
 
 
 jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
-    size_t xsize;
-    size_t ysize;
-
     auto drawableClass = env->FindClass("android/graphics/drawable/AnimationDrawable");
     jmethodID drawableMethodID = env->GetMethodID(drawableClass, "<init>", "()V");
     jmethodID addDrawableMethodID = env->GetMethodID(drawableClass, "addFrame",
@@ -69,8 +68,7 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
 
     jobject btm = nullptr;
 
-    uint8_t *bitmap_buffer;
-    ICCProfile icc_profile;
+    ImageOutCallbackData out_data;
 
     for (;;) {
         JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
@@ -86,49 +84,17 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
                 jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetBasicInfo");
                 return nullptr;
             }
-            xsize = info.xsize;
-            ysize = info.ysize;
+            out_data.setSize(info.xsize, info.ysize);
+            out_data.setIsAlphaPremultiplied(info.alpha_premultiplied);
             JxlResizableParallelRunnerSetThreads(runner.get(),
                                                  JxlResizableParallelRunnerSuggestThreads(
                                                          info.xsize, info.ysize));
         } else if (status == JXL_DEC_COLOR_ENCODING) {
-            if (!icc_profile.parse(env, dec.get())) {
+            if (!out_data.parseICCProfile(env, dec.get())) {
                 return nullptr;
             }
         } else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
-            size_t buffer_size;
-            if (JXL_DEC_SUCCESS != JxlDecoderImageOutBufferSize(dec.get(), &format, &buffer_size)) {
-                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
-                                         "JxlDecoderImageOutBufferSize");
-                return nullptr;
-            }
-
-            if (buffer_size != xsize * ysize * 4) {
-                char error_buffer[256];
-                snprintf(error_buffer, 256, "Invalid bitmap buffer size (expected %d, got %d)",
-                         xsize * ysize * 4, buffer_size);
-                jxlviewer::throwNewError(env, OTHER_ERROR_TYPE,
-                                         error_buffer);
-                return nullptr;
-            }
-
-            btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId, (int) xsize,
-                                              (int) ysize, bitmapConfig);
-
-
-            AndroidBitmap_lockPixels(env, btm, reinterpret_cast<void **>(&bitmap_buffer));
-
-            size_t pixels_buffer_size = buffer_size * sizeof(uint8_t);
-
-            if (JXL_DEC_SUCCESS != JxlDecoderSetImageOutBuffer(dec.get(), &format, bitmap_buffer,
-                                                               pixels_buffer_size)) {
-                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
-                                         "JxlDecoderSetImageOutBuffer");
-                return nullptr;
-            }
         } else if (status == JXL_DEC_FULL_IMAGE) {
-            icc_profile.transform(bitmap_buffer, xsize, ysize, info.alpha_premultiplied);
-
             AndroidBitmap_unlockPixels(env, btm);
 
             auto btmDrawable = env->NewObject(bitmapDrawableClass, bitmapDrawableMethodID, btm);
@@ -143,11 +109,27 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
                 jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetFrameHeader");
                 return nullptr;
             }
+
+            btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId,
+                                              (int) out_data.getWidth(),
+                                              (int) out_data.getHeight(), bitmapConfig);
+
+            AndroidBitmap_lockPixels(env, btm,
+                                     reinterpret_cast<void **>(out_data.getImageBufferPtr()));
+
+            if (JXL_DEC_SUCCESS !=
+                JxlDecoderSetImageOutCallback(dec.get(), &format,
+                                              jxl_viewer_image_out_callback, &out_data)) {
+                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
+                                         "JxlDecoderSetImageOutCallback");
+                return nullptr;
+            }
         } else {
             jxlviewer::throwNewError(env, OTHER_ERROR_TYPE, "Unknown decoder status");
             return nullptr;
         }
     }
+
 }
 
 extern "C" JNIEXPORT jobject JNICALL
