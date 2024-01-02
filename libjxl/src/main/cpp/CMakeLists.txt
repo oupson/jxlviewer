@@ -51,4 +51,4 @@ target_link_libraries( # Specifies the target library.
         # included in the NDK.
         android jnigraphics log z
         jxl_dec jxl_threads
-        skcms-interface)
+        skcms)
