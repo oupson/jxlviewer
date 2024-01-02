@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace 'fr.oupson.libjxl_microbenchmark'
-    compileSdk 33
+    compileSdk 34
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -19,7 +19,7 @@ android {
 
     defaultConfig {
         minSdk 21
-        targetSdk 33
+        targetSdk 34
 
         testInstrumentationRunnerArguments["androidx.benchmark.profiling.mode"] = 'StackSampling'
 
@@ -44,7 +44,7 @@ dependencies {
     androidTestImplementation 'androidx.test:runner:1.5.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.benchmark:benchmark-junit4:1.2.0-beta02'
+    androidTestImplementation 'androidx.benchmark:benchmark-junit4:1.2.2'
 
     androidTestImplementation project(':libjxl')
 }
