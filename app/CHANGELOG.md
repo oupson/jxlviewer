@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Changed
-- Updated libjxl to v0.8.1
+- Updated libjxl to v0.9.0
 - Improve multithreading decoding.
 
 ## [0.3.0] - 2023-01-22
