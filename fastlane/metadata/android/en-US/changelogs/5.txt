@@ -1,3 +1,3 @@
 Changed:
-- Updated libjxl to v0.8.1
+- Updated libjxl to v0.9.0
 - Improve multithreading decoding.
