@@ -4,3 +4,6 @@
 
 deploymentTargetDropDown.xml
 androidTestResultsUserPreferences.xml
+
+/gradle.xml
+/misc.xml
