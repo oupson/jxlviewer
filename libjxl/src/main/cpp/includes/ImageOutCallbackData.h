@@ -61,9 +61,7 @@ public:
 
     bool parseICCProfile(JNIEnv *env, JxlDecoder *dec) noexcept {
         size_t icc_size;
-        if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(dec, nullptr, // UNUSED
-                                                           JXL_COLOR_PROFILE_TARGET_DATA,
-                                                           &icc_size)) {
+        if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(dec, JXL_COLOR_PROFILE_TARGET_DATA, &icc_size)) {
             jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetICCProfileSize");
             return false;
         }
@@ -75,7 +73,7 @@ public:
             return false;
         }
 
-        if (JXL_DEC_SUCCESS != JxlDecoderGetColorAsICCProfile(dec, nullptr, // UNUSED
+        if (JXL_DEC_SUCCESS != JxlDecoderGetColorAsICCProfile(dec,
                                                               JXL_COLOR_PROFILE_TARGET_DATA,
                                                               this->icc_buffer,
                                                               icc_size)) {
