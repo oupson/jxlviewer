@@ -70,7 +70,7 @@ class ViewerActivity : ComponentActivity() {
     }
 
     private fun loadImage(input: InputStream): AnimationDrawable? = input.use {
-        JxlDecoder.loadJxl(it.readBytes())
+        JxlDecoder.loadJxl(it)
     }
 
     // Enable immersive mode.
