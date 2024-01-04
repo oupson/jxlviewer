@@ -68,9 +68,16 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, InputSource &source) {
 
     uint8_t buffer[BUFFER_SIZE];
     auto readSize = source.read(buffer, sizeof(buffer));
-    if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec.get(), buffer, readSize)) {
-        jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetInput");
+    if (readSize == -1) {
+        jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
         return nullptr;
+    } else if (readSize == INT32_MIN) {
+        return nullptr;
+    } else {
+        if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec.get(), buffer, readSize)) {
+            jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetInput");
+            return nullptr;
+        }
     }
 
     jobject btm = nullptr;
@@ -88,6 +95,8 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, InputSource &source) {
             readSize = source.read(buffer + remaining, sizeof(buffer) - remaining);
             if (readSize == -1) {
                 jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
+                return nullptr;
+            } else if (readSize == INT32_MIN) {
                 return nullptr;
             } else {
                 if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec.get(), buffer, readSize)) {
