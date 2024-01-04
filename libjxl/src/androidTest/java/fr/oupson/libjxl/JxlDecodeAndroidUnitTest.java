@@ -3,15 +3,21 @@ package fr.oupson.libjxl;
 import android.content.Context;
 import android.graphics.drawable.AnimationDrawable;
 import android.graphics.drawable.BitmapDrawable;
+import android.net.Uri;
+import android.os.ParcelFileDescriptor;
 
 import androidx.test.core.app.ApplicationProvider;
 
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.util.Objects;
 
 import fr.oupson.libjxl.exceptions.DecodeError;
 
@@ -78,6 +84,31 @@ public class JxlDecodeAndroidUnitTest {
 
         try {
             AnimationDrawable result = JxlDecoder.loadJxl(content);
+            Assert.assertNotNull(result);
+            Assert.assertEquals("Invalid number of frames", 27, result.getNumberOfFrames());
+
+            for (int i = 0; i < 27; i++) {
+                BitmapDrawable frame = (BitmapDrawable) result.getFrame(i);
+                Assert.assertEquals("Invalid frame width", 378, frame.getBitmap().getWidth());
+                Assert.assertEquals("Invalid frame height", 300, frame.getBitmap().getHeight());
+            }
+        } catch (Exception e) {
+            Assert.fail("Failed to read image : " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void decode_FerrisWithParcelFileDescriptorShouldNotFail() throws IOException {
+        Context context = ApplicationProvider.getApplicationContext();
+        Path testFile = new File(context.getCacheDir(), "ferris.jxl").toPath();
+        try (InputStream assetInputStream = context.getResources().getAssets().open("ferris.jxl")) {
+            Files.copy(assetInputStream, testFile);
+        }
+
+        Uri androidUri = Uri.fromFile(testFile.toFile());
+
+        try (ParcelFileDescriptor input = context.getContentResolver().openFileDescriptor(androidUri, "r")) {
+            AnimationDrawable result = JxlDecoder.loadJxl(Objects.requireNonNull(input));
             Assert.assertNotNull(result);
             Assert.assertEquals("Invalid number of frames", 27, result.getNumberOfFrames());
 

@@ -15,12 +15,14 @@
 #include <skcms.h>
 
 #include <android/bitmap.h>
+#include <unistd.h>
 
 #include "jxlviewer_consts.h"
 #include "Exception.h"
 
 #include "InputSource.h"
 #include "JniInputStream.h"
+#include "FileDescriptorInputSource.h"
 
 
 jobject DecodeJpegXlOneShot(JNIEnv *env, InputSource &source) {
@@ -166,3 +168,10 @@ Java_fr_oupson_libjxl_JxlDecoder_loadJxlFromInputStream(JNIEnv *env, jclass /* c
     return DecodeJpegXlOneShot(env, jniInputStream);
 }
 
+extern "C"
+JNIEXPORT jobject JNICALL
+Java_fr_oupson_libjxl_JxlDecoder_loadJxlFromFd(JNIEnv *env, jclass /* clazz */, jint fd) {
+    auto jniInputStream = FileDescriptorInputSource(env, fd);
+
+    return DecodeJpegXlOneShot(env, jniInputStream);
+}
