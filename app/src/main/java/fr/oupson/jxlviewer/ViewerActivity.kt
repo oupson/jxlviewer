@@ -2,6 +2,7 @@ package fr.oupson.jxlviewer
 
 import android.graphics.drawable.AnimationDrawable
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -39,6 +40,7 @@ class ViewerActivity : ComponentActivity() {
     private fun loadImage() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
+
                 val image = intent?.data?.let {
                     when (it.scheme) {
                         "https" -> {
@@ -50,7 +52,8 @@ class ViewerActivity : ComponentActivity() {
 
                             img
                         }
-                        else -> loadImage(contentResolver.openInputStream(it)!!)
+
+                        else -> loadImage(contentResolver.openFileDescriptor(it, "r")!!)
                     }
                 }
                     ?: loadImage(resources.assets.open("logo.jxl"))
@@ -63,14 +66,22 @@ class ViewerActivity : ComponentActivity() {
                 Log.e(TAG, "Failed to load image", e)
                 withContext(Dispatchers.Main) {
                     binding.test.setImageResource(R.drawable.baseline_error_outline_24)
-                    Toast.makeText(this@ViewerActivity, R.string.image_load_failed, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this@ViewerActivity,
+                        R.string.image_load_failed,
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }
     }
 
     private fun loadImage(input: InputStream): AnimationDrawable? = input.use {
-        JxlDecoder.loadJxl(it.readBytes())
+        JxlDecoder.loadJxl(it)
+    }
+
+    private fun loadImage(fd: ParcelFileDescriptor): AnimationDrawable? = fd.use {
+        JxlDecoder.loadJxl(it)
     }
 
     // Enable immersive mode.

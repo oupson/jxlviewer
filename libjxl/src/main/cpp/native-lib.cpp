@@ -15,12 +15,17 @@
 #include <skcms.h>
 
 #include <android/bitmap.h>
+#include <unistd.h>
 
 #include "jxlviewer_consts.h"
 #include "Exception.h"
 
+#include "InputSource.h"
+#include "JniInputStream.h"
+#include "FileDescriptorInputSource.h"
 
-jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
+
+jobject DecodeJpegXlOneShot(JNIEnv *env, InputSource &source) {
     auto drawableClass = env->FindClass("android/graphics/drawable/AnimationDrawable");
     jmethodID drawableMethodID = env->GetMethodID(drawableClass, "<init>", "()V");
     jmethodID addDrawableMethodID = env->GetMethodID(drawableClass, "addFrame",
@@ -63,8 +68,19 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
     JxlFrameHeader frameHeader;
     JxlPixelFormat format = {4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
 
-    JxlDecoderSetInput(dec.get(), jxl, size);
-    JxlDecoderCloseInput(dec.get());
+    uint8_t buffer[BUFFER_SIZE];
+    auto readSize = source.read(buffer, sizeof(buffer));
+    if (readSize == -1) {
+        jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
+        return nullptr;
+    } else if (readSize == INT32_MIN) {
+        return nullptr;
+    } else {
+        if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec.get(), buffer, readSize)) {
+            jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetInput");
+            return nullptr;
+        }
+    }
 
     jobject btm = nullptr;
 
@@ -77,8 +93,19 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
             jxlviewer::throwNewError(env, DECODER_FAILED_ERROR);
             return nullptr;
         } else if (status == JXL_DEC_NEED_MORE_INPUT) {
-            jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
-            return nullptr;
+            auto remaining = JxlDecoderReleaseInput(dec.get()); // TODO REMAINING TEST
+            readSize = source.read(buffer + remaining, sizeof(buffer) - remaining);
+            if (readSize == -1) {
+                jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
+                return nullptr;
+            } else if (readSize == INT32_MIN) {
+                return nullptr;
+            } else {
+                if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec.get(), buffer, readSize)) {
+                    jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetInput");
+                    return nullptr;
+                }
+            }
         } else if (status == JXL_DEC_BASIC_INFO) {
             if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(dec.get(), &info)) {
                 jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetBasicInfo");
@@ -132,14 +159,19 @@ jobject DecodeJpegXlOneShot(JNIEnv *env, const uint8_t *jxl, size_t size) {
 
 }
 
-extern "C" JNIEXPORT jobject JNICALL
-Java_fr_oupson_libjxl_JxlDecoder_loadJxl(JNIEnv *env, jclass /* clazz */, jbyteArray data) {
-    auto size = env->GetArrayLength(data);
-    auto dataPtr = env->GetByteArrayElements(data, nullptr);
-    auto result = DecodeJpegXlOneShot(env, (uint8_t *) dataPtr, size);
+extern "C"
+JNIEXPORT jobject JNICALL
+Java_fr_oupson_libjxl_JxlDecoder_loadJxlFromInputStream(JNIEnv *env, jclass /* clazz */,
+                                                        jobject input_stream) {
+    auto jniInputStream = JniInputStream(env, input_stream);
 
-    env->ReleaseByteArrayElements(data, dataPtr, 0);
-
-    return result;
+    return DecodeJpegXlOneShot(env, jniInputStream);
 }
 
+extern "C"
+JNIEXPORT jobject JNICALL
+Java_fr_oupson_libjxl_JxlDecoder_loadJxlFromFd(JNIEnv *env, jclass /* clazz */, jint fd) {
+    auto jniInputStream = FileDescriptorInputSource(env, fd);
+
+    return DecodeJpegXlOneShot(env, jniInputStream);
+}
