@@ -11,6 +11,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.NoSuchFileException;
 
 import fr.oupson.libjxl.exceptions.DecodeError;
 
@@ -100,8 +101,6 @@ public class JxlDecodeAndroidUnitTest {
         int size = input.read(content);
         input.close();
 
-        // As input is marked finished, it is a decoder error and not an NeedMoreInputException
-        // TODO: fixme when implementing stream loading
         DecodeError error = Assert.assertThrows(DecodeError.class, () -> {
             AnimationDrawable result = JxlDecoder.loadJxl(content);
         });
@@ -119,10 +118,52 @@ public class JxlDecodeAndroidUnitTest {
         int size = input.read(content);
         input.close();
 
-        DecodeError error =  Assert.assertThrows(DecodeError.class, () -> {
+        DecodeError error = Assert.assertThrows(DecodeError.class, () -> {
             AnimationDrawable result = JxlDecoder.loadJxl(content);
         });
         Assert.assertEquals(DecodeError.DecodeErrorType.DecoderFailedError, error.getErrorType());
+    }
+
+    @Test
+    public void decode_WithFailingStreamShouldFail() throws IOException {
+        Context context = ApplicationProvider.getApplicationContext();
+
+        class FailingStream extends InputStream {
+            private final InputStream wrapped;
+            private int count = 0;
+
+            public FailingStream(InputStream stream) {
+                this.wrapped = stream;
+            }
+
+            @Override
+            public int read() {
+                return -1;
+            }
+
+            @Override
+            public int read(byte[] b, int off, int len) throws IOException {
+                if (count == 0) {
+                    count += 1;
+                    return wrapped.read(b, off, len);
+                } else {
+                    throw new NoSuchFileException("foo.jxl");
+                }
+            }
+
+            @Override
+            public void close() throws IOException {
+                this.wrapped.close();
+                super.close();
+            }
+        }
+
+        InputStream input = new FailingStream(context.getResources().getAssets().open("ferris.jxl"));
+
+        // As input is marked finished, it is a decoder error and not an NeedMoreInputException
+        Assert.assertThrows(NoSuchFileException.class, () -> {
+            AnimationDrawable result = JxlDecoder.loadJxl(input);
+        });
     }
 
     // TODO: find a way to test icc profile errors
