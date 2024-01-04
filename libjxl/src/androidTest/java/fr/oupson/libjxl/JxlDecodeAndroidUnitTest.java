@@ -11,6 +11,7 @@ import androidx.test.core.app.ApplicationProvider;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,15 +28,8 @@ public class JxlDecodeAndroidUnitTest {
         Context context = ApplicationProvider.getApplicationContext();
         InputStream input = context.getResources().getAssets().open("logo.jxl");
 
-        byte[] content = new byte[input.available()];
-
-        int size = input.read(content);
-        input.close();
-
-        Assert.assertEquals("Failed to read test file, invalid size", 117, size);
-
         try {
-            AnimationDrawable result = JxlDecoder.loadJxl(content);
+            AnimationDrawable result = JxlDecoder.loadJxl(input);
             Assert.assertNotNull(result);
             Assert.assertEquals("Invalid number of frames", 1, result.getNumberOfFrames());
             BitmapDrawable frame = (BitmapDrawable) result.getFrame(0);
@@ -51,15 +45,8 @@ public class JxlDecodeAndroidUnitTest {
         Context context = ApplicationProvider.getApplicationContext();
         InputStream input = context.getResources().getAssets().open("didi.jxl");
 
-        byte[] content = new byte[input.available()];
-
-        int size = input.read(content);
-        input.close();
-
-        Assert.assertEquals("Failed to read test file, invalid size", 529406, size);
-
         try {
-            AnimationDrawable result = JxlDecoder.loadJxl(content);
+            AnimationDrawable result = JxlDecoder.loadJxl(input);
             Assert.assertNotNull(result);
             Assert.assertEquals("Invalid number of frames", 1, result.getNumberOfFrames());
             BitmapDrawable frame = (BitmapDrawable) result.getFrame(0);
@@ -75,15 +62,8 @@ public class JxlDecodeAndroidUnitTest {
         Context context = ApplicationProvider.getApplicationContext();
         InputStream input = context.getResources().getAssets().open("ferris.jxl");
 
-        byte[] content = new byte[input.available()];
-
-        int size = input.read(content);
-        input.close();
-
-        Assert.assertEquals("Failed to read test file, invalid size", 404955, size);
-
         try {
-            AnimationDrawable result = JxlDecoder.loadJxl(content);
+            AnimationDrawable result = JxlDecoder.loadJxl(input);
             Assert.assertNotNull(result);
             Assert.assertEquals("Invalid number of frames", 27, result.getNumberOfFrames());
 
@@ -101,8 +81,10 @@ public class JxlDecodeAndroidUnitTest {
     public void decode_FerrisWithParcelFileDescriptorShouldNotFail() throws IOException {
         Context context = ApplicationProvider.getApplicationContext();
         Path testFile = new File(context.getCacheDir(), "ferris.jxl").toPath();
-        try (InputStream assetInputStream = context.getResources().getAssets().open("ferris.jxl")) {
-            Files.copy(assetInputStream, testFile);
+        if (!Files.exists(testFile)) {
+            try (InputStream assetInputStream = context.getResources().getAssets().open("ferris.jxl")) {
+                Files.copy(assetInputStream, testFile);
+            }
         }
 
         Uri androidUri = Uri.fromFile(testFile.toFile());
@@ -133,7 +115,7 @@ public class JxlDecodeAndroidUnitTest {
         input.close();
 
         DecodeError error = Assert.assertThrows(DecodeError.class, () -> {
-            AnimationDrawable result = JxlDecoder.loadJxl(content);
+            AnimationDrawable result = JxlDecoder.loadJxl(new ByteArrayInputStream(content));
         });
 
         Assert.assertEquals(DecodeError.DecodeErrorType.DecoderFailedError, error.getErrorType());
@@ -143,14 +125,8 @@ public class JxlDecodeAndroidUnitTest {
     public void decode_PngShouldFail() throws IOException {
         Context context = ApplicationProvider.getApplicationContext();
         InputStream input = context.getResources().getAssets().open("android.png");
-
-        byte[] content = new byte[input.available()];
-
-        int size = input.read(content);
-        input.close();
-
         DecodeError error = Assert.assertThrows(DecodeError.class, () -> {
-            AnimationDrawable result = JxlDecoder.loadJxl(content);
+            AnimationDrawable result = JxlDecoder.loadJxl(input);
         });
         Assert.assertEquals(DecodeError.DecodeErrorType.DecoderFailedError, error.getErrorType());
     }

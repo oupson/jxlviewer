@@ -8,7 +8,7 @@
 #include "InputSource.h"
 #include <unistd.h>
 
-int32_t readWithErrorHandling(JNIEnv *env, int fd, uint8_t *buffer, size_t size);
+inline int32_t readWithErrorHandling(JNIEnv *env, int fd, uint8_t *buffer, size_t size);
 
 class FileDescriptorInputSource : public InputSource {
 public:
@@ -25,7 +25,7 @@ private:
     int fd;
 };
 
-int32_t readWithErrorHandling(JNIEnv *env, int fd, uint8_t *buffer, size_t size) {
+inline int32_t readWithErrorHandling(JNIEnv *env, int fd, uint8_t *buffer, size_t size) {
     auto n = read(fd, buffer, size);
     if (n > 0) {
         return n;
