@@ -43,6 +43,8 @@ find_library( # Sets the name of the path variable.
 # Specifies libraries CMake should link to your target library. You
 # can link multiple libraries, such as libraries you define in this
 # build script, prebuilt third-party libraries, or system libraries.
+target_sources(jxlreader PRIVATE "${PROJECT_SOURCE_DIR}/third_party/libjxl/third_party/skcms/skcms.cc")
+target_include_directories(jxlreader PRIVATE "${PROJECT_SOURCE_DIR}/third_party/libjxl/third_party/skcms/")
 
 target_link_libraries( # Specifies the target library.
         jxlreader
@@ -50,5 +52,4 @@ target_link_libraries( # Specifies the target library.
         # Links the target library to the log library
         # included in the NDK.
         android jnigraphics log z
-        jxl_dec jxl_threads
-        skcms)
+        jxl_dec jxl_threads)
