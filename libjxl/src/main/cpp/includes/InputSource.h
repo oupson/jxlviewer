@@ -5,6 +5,8 @@
 #ifndef JXLVIEWER_INPUTSOURCE_H
 #define JXLVIEWER_INPUTSOURCE_H
 
+#include <cinttypes>
+
 /**
  * @class InputSource
  * @brief Abstraction over an input source.

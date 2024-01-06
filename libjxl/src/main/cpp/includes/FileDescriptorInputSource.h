@@ -5,8 +5,10 @@
 #ifndef JXLVIEWER_FILEDESCRIPTORINPUTSOURCE_H
 #define JXLVIEWER_FILEDESCRIPTORINPUTSOURCE_H
 
-#include "InputSource.h"
 #include <unistd.h>
+
+#include "InputSource.h"
+#include "Exception.h"
 
 inline int32_t readWithErrorHandling(JNIEnv *env, int fd, uint8_t *buffer, size_t size);
 

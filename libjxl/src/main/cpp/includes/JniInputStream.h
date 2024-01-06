@@ -5,8 +5,11 @@
 #ifndef JXLVIEWER_JNIINPUTSTREAM_H
 #define JXLVIEWER_JNIINPUTSTREAM_H
 
-#include "InputSource.h"
+#include <algorithm>
+
 #include <jni.h>
+
+#include "InputSource.h"
 
 #define BUFFER_SIZE (4096)
 
@@ -54,7 +57,8 @@ public:
      * It efficiently manages the reading process, handling buffering and JNI calls.
      */
     int32_t read(uint8_t *buffer, size_t size) override {
-        ssize_t totalRead = (this->sizeRead > 0) ? readFromBuffer(buffer, size) : this->sizeRead;
+        int32_t totalRead = (this->sizeRead > 0) ? readFromBuffer(buffer, (int32_t) size)
+                                                 : this->sizeRead;
 
         while (totalRead < size) {
             this->sizeRead = env->CallIntMethod(this->inputStream, this->readMethodId,
@@ -64,7 +68,7 @@ public:
             } else {
                 this->offset = 0;
                 if (this->sizeRead >= 0) {
-                    totalRead += readFromBuffer(buffer + totalRead, size - totalRead);
+                    totalRead += readFromBuffer(buffer + totalRead, ((int32_t) size) - totalRead);
                 } else {
                     break;
                 }
@@ -79,10 +83,10 @@ private:
     jobject inputStream;
     jmethodID readMethodId;
     jbyteArray javaByteArray;
-    size_t sizeRead;
-    size_t offset;
+    int32_t sizeRead;
+    int32_t offset;
 
-    size_t readFromBuffer(const uint8_t *buffer, size_t size) {
+    int32_t readFromBuffer(const uint8_t *buffer, int32_t size) {
         auto res = std::min(size, sizeRead - offset);
         env->GetByteArrayRegion(javaByteArray, offset,
                                 res,

@@ -13,6 +13,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -25,7 +26,7 @@ public class JxlDecoderBenchmark {
     public BenchmarkRule benchmarkRule = new BenchmarkRule();
 
     private void loadImage(byte[] content) throws DecodeError, ClassNotFoundException {
-        AnimationDrawable animationDrawable = JxlDecoder.loadJxl(content);
+        AnimationDrawable animationDrawable = JxlDecoder.loadJxl(new ByteArrayInputStream(content));
     }
 
     @Test
