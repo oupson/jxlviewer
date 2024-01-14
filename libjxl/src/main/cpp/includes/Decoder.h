@@ -12,6 +12,7 @@ public:
     ~Decoder();
 
     jobject DecodeJxl(JNIEnv *env, InputSource &source);
+    jobject DecodeJxlThumbnail(JNIEnv *env, InputSource &source);
 
 private:
     JavaVM *vm;
