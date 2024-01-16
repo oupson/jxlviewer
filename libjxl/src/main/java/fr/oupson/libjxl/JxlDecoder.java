@@ -1,5 +1,6 @@
 package fr.oupson.libjxl;
 
+import android.graphics.Bitmap;
 import android.graphics.drawable.AnimationDrawable;
 import android.os.ParcelFileDescriptor;
 
@@ -36,19 +37,19 @@ public class JxlDecoder {
     }
 
     public AnimationDrawable decodeImage(InputStream inputStream) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
-        return loadJxlFromInputStream(this.nativeDecoderPtr, inputStream, false);
+        return loadJxlFromInputStream(this.nativeDecoderPtr, inputStream);
     }
 
     public AnimationDrawable decodeImage(ParcelFileDescriptor fileDescriptor) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
-        return loadJxlFromFd(this.nativeDecoderPtr, fileDescriptor.getFd(), false);
+        return loadJxlFromFd(this.nativeDecoderPtr, fileDescriptor.getFd());
     }
 
-    public AnimationDrawable decodeThumbnail(InputStream inputStream) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
-        return loadJxlFromInputStream(this.nativeDecoderPtr, inputStream, true);
+    public Bitmap decodeThumbnail(InputStream inputStream) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
+        return loadThumbnailFromInputStream(this.nativeDecoderPtr, inputStream);
     }
 
-    public AnimationDrawable decodeThumbnail(ParcelFileDescriptor fileDescriptor) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
-        return loadJxlFromFd(this.nativeDecoderPtr, fileDescriptor.getFd(), true);
+    public Bitmap decodeThumbnail(ParcelFileDescriptor fileDescriptor) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
+        return loadThumbnailFromFd(this.nativeDecoderPtr, fileDescriptor.getFd());
     }
 
     public static AnimationDrawable loadJxl(InputStream inputStream) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
@@ -59,11 +60,11 @@ public class JxlDecoder {
         return JxlDecoder.getInstance().decodeImage(fileDescriptor);
     }
 
-    public static AnimationDrawable loadThumbnail(InputStream inputStream) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
+    public static Bitmap loadThumbnail(InputStream inputStream) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
         return JxlDecoder.getInstance().decodeThumbnail(inputStream);
     }
 
-    public static AnimationDrawable loadThumbnail(ParcelFileDescriptor fileDescriptor) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
+    public static Bitmap loadThumbnail(ParcelFileDescriptor fileDescriptor) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
         return JxlDecoder.getInstance().decodeThumbnail(fileDescriptor);
     }
 
@@ -71,7 +72,11 @@ public class JxlDecoder {
 
     private static native void freeNativeDecoderPtr(long nativeDecoderPtr);
 
-    private static native AnimationDrawable loadJxlFromInputStream(long nativeDecoderPtr, InputStream inputStream, boolean decodeAsThumbnail) throws OutOfMemoryError, DecodeError, ClassNotFoundException;
+    private static native AnimationDrawable loadJxlFromInputStream(long nativeDecoderPtr, InputStream inputStream) throws OutOfMemoryError, DecodeError, ClassNotFoundException;
 
-    private static native AnimationDrawable loadJxlFromFd(long nativeDecoderPtr, int fd, boolean decodeAsThumbnail) throws OutOfMemoryError, DecodeError, ClassNotFoundException;
+    private static native AnimationDrawable loadJxlFromFd(long nativeDecoderPtr, int fd) throws OutOfMemoryError, DecodeError, ClassNotFoundException;
+
+    private static native Bitmap loadThumbnailFromInputStream(long nativeDecoderPtr, InputStream inputStream) throws OutOfMemoryError, DecodeError, ClassNotFoundException;
+
+    private static native Bitmap loadThumbnailFromFd(long nativeDecoderPtr, int fd) throws OutOfMemoryError, DecodeError, ClassNotFoundException;
 }

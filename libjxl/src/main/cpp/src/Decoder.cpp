@@ -179,8 +179,6 @@ jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source) {
 
 // TODO: image preview
 jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
-    jobject drawable = env->NewObject(drawableClass, drawableMethodID);
-
     // Multi-threaded parallel runner.
     auto runner = JxlResizableParallelRunnerMake(nullptr);
 
@@ -199,9 +197,15 @@ jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
         return nullptr;
     }
 
+    if (JXL_DEC_SUCCESS !=
+        JxlDecoderSetProgressiveDetail(dec.get(), JxlProgressiveDetail::kLastPasses)) {
+        jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetProgressiveDetail");
+        return nullptr;
+    }
+
     JxlBasicInfo info;
     JxlFrameHeader frameHeader;
-    JxlPixelFormat format = {3, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
+    JxlPixelFormat format = {4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
 
     uint8_t buffer[BUFFER_SIZE];
     auto readSize = source.read(buffer, sizeof(buffer));
@@ -216,11 +220,9 @@ jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
             return nullptr;
         }
     }
-    JxlDecoderSetProgressiveDetail(dec.get(), JxlProgressiveDetail::kLastPasses);
 
     jobject btm = nullptr;
-
-    ImageOutCallbackData out_data(skcms_PixelFormat_RGB_888);
+    ImageOutCallbackData out_data;
 
     for (;;) {
         JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
@@ -247,6 +249,10 @@ jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
                 jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetBasicInfo");
                 return nullptr;
             }
+            if (info.alpha_bits == 0) {
+                out_data = ImageOutCallbackData(skcms_PixelFormat_RGB_888);
+                format = JxlPixelFormat{3, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
+            }
             out_data.setSize(info.xsize, info.ysize);
             out_data.setIsAlphaPremultiplied(info.alpha_premultiplied);
             JxlResizableParallelRunnerSetThreads(runner.get(),
@@ -260,22 +266,11 @@ jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
         } else if (status == JXL_DEC_FULL_IMAGE) {
             AndroidBitmap_unlockPixels(env, btm);
 
-            auto btmDrawable = env->NewObject(bitmapDrawableClass, bitmapDrawableMethodID, btm);
-            uint32_t num = (info.animation.tps_numerator == 0) ? 1 : info.animation.tps_numerator;
-            env->CallVoidMethod(drawable, addDrawableMethodID, btmDrawable,
-                                (int) (frameHeader.duration * 1000 *
-                                       info.animation.tps_denominator / num));
             JxlDecoderCloseInput(dec.get());
-            return drawable;
+            return btm;
         } else if (status == JXL_DEC_SUCCESS) {
             AndroidBitmap_unlockPixels(env, btm);
-
-            auto btmDrawable = env->NewObject(bitmapDrawableClass, bitmapDrawableMethodID, btm);
-            uint32_t num = (info.animation.tps_numerator == 0) ? 1 : info.animation.tps_numerator;
-            env->CallVoidMethod(drawable, addDrawableMethodID, btmDrawable,
-                                (int) (frameHeader.duration * 1000 *
-                                       info.animation.tps_denominator / num));
-            return drawable;
+            return btm;
         } else if (status == JXL_DEC_FRAME) {
             if (JXL_DEC_SUCCESS != JxlDecoderGetFrameHeader(dec.get(), &frameHeader)) {
                 jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetFrameHeader");
