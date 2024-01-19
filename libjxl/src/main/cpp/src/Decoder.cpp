@@ -88,32 +88,20 @@ jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source) {
     JxlPixelFormat format = {4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
 
     uint8_t buffer[BUFFER_SIZE];
-    auto readSize = source.read(buffer, sizeof(buffer));
-    if (readSize == -1) {
-        jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
-        return nullptr;
-    } else if (readSize == INT32_MIN) {
-        return nullptr;
-    } else {
-        if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec.get(), buffer, readSize)) {
-            jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetInput");
-            return nullptr;
-        }
-    }
 
     jobject btm = nullptr;
 
     ImageOutCallbackData out_data;
 
-    for (;;) {
-        JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
+    JxlDecoderStatus status = JXL_DEC_NEED_MORE_INPUT;
 
+    for (;;) {
         if (status == JXL_DEC_ERROR) {
             jxlviewer::throwNewError(env, DECODER_FAILED_ERROR);
             return nullptr;
         } else if (status == JXL_DEC_NEED_MORE_INPUT) {
             auto remaining = JxlDecoderReleaseInput(dec.get()); // TODO REMAINING TEST
-            readSize = source.read(buffer + remaining, sizeof(buffer) - remaining);
+            auto readSize = source.read(buffer + remaining, sizeof(buffer) - remaining);
             if (readSize == -1) {
                 jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
                 return nullptr;
@@ -174,10 +162,11 @@ jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source) {
             jxlviewer::throwNewError(env, OTHER_ERROR_TYPE, "Unknown decoder status");
             return nullptr;
         }
+        status = JxlDecoderProcessInput(dec.get());
     }
 }
 
-// TODO: image preview
+// TODO: image preview when supported
 jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
     // Multi-threaded parallel runner.
     auto runner = JxlResizableParallelRunnerMake(nullptr);
@@ -208,31 +197,19 @@ jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
     JxlPixelFormat format = {4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
 
     uint8_t buffer[BUFFER_SIZE];
-    auto readSize = source.read(buffer, sizeof(buffer));
-    if (readSize == -1) {
-        jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
-        return nullptr;
-    } else if (readSize == INT32_MIN) {
-        return nullptr;
-    } else {
-        if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec.get(), buffer, readSize)) {
-            jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetInput");
-            return nullptr;
-        }
-    }
 
     jobject btm = nullptr;
     ImageOutCallbackData out_data;
 
-    for (;;) {
-        JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
+    JxlDecoderStatus status = JXL_DEC_NEED_MORE_INPUT;
 
+    for (;;) {
         if (status == JXL_DEC_ERROR) {
             jxlviewer::throwNewError(env, DECODER_FAILED_ERROR);
             return nullptr;
         } else if (status == JXL_DEC_NEED_MORE_INPUT) {
             auto remaining = JxlDecoderReleaseInput(dec.get()); // TODO REMAINING TEST
-            readSize = source.read(buffer + remaining, sizeof(buffer) - remaining);
+            auto readSize = source.read(buffer + remaining, sizeof(buffer) - remaining);
             if (readSize == -1) {
                 jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
                 return nullptr;
@@ -299,5 +276,7 @@ jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
             jxlviewer::throwNewError(env, OTHER_ERROR_TYPE, "Unknown decoder status");
             return nullptr;
         }
+
+        status = JxlDecoderProcessInput(dec.get());
     }
 }

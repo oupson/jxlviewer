@@ -78,21 +78,11 @@ class ViewerActivity : ComponentActivity() {
     }
 
     private fun loadImage(input: InputStream): AnimationDrawable? = input.use {
-        JxlDecoder.loadThumbnail(it).let {
-            val a = AnimationDrawable()
-            a.addFrame(BitmapDrawable(it), 1000)
-            a.start()
-            a
-        }
+        JxlDecoder.loadJxl(it)
     }
 
     private fun loadImage(fd: ParcelFileDescriptor): AnimationDrawable? = fd.use {
-        JxlDecoder.loadThumbnail(it).let {
-            val a = AnimationDrawable()
-            a.addFrame(BitmapDrawable(it), 1000)
-            a.start()
-            a
-        }
+        JxlDecoder.loadJxl(it)
     }
 
     // Enable immersive mode.
