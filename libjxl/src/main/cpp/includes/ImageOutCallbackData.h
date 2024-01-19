@@ -25,11 +25,18 @@ private:
     uint8_t *icc_buffer;
     skcms_ICCProfile icc = {};
 
+    skcms_PixelFormat sourcePixelFormat;
+
 public:
-    ImageOutCallbackData() : width(0), height(0), is_alpha_premultiplied(false),
-                             image_buffer(nullptr),
-                             icc_buffer(nullptr) {
+    ImageOutCallbackData() : ImageOutCallbackData(skcms_PixelFormat_RGBA_8888) {
     }
+
+    ImageOutCallbackData(skcms_PixelFormat sourcePixelFormat) : width(0), height(0),
+                                                                is_alpha_premultiplied(false),
+                                                                image_buffer(nullptr),
+                                                                icc_buffer(nullptr),
+                                                                sourcePixelFormat(
+                                                                        sourcePixelFormat) {}
 
     ~ImageOutCallbackData() {
         if (icc_buffer != nullptr) {
@@ -61,7 +68,8 @@ public:
 
     bool parseICCProfile(JNIEnv *env, JxlDecoder *dec) noexcept {
         size_t icc_size;
-        if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(dec, JXL_COLOR_PROFILE_TARGET_DATA, &icc_size)) {
+        if (JXL_DEC_SUCCESS !=
+            JxlDecoderGetICCProfileSize(dec, JXL_COLOR_PROFILE_TARGET_DATA, &icc_size)) {
             jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetICCProfileSize");
             return false;
         }
@@ -73,10 +81,9 @@ public:
             return false;
         }
 
-        if (JXL_DEC_SUCCESS != JxlDecoderGetColorAsICCProfile(dec,
-                                                              JXL_COLOR_PROFILE_TARGET_DATA,
-                                                              this->icc_buffer,
-                                                              icc_size)) {
+        if (JXL_DEC_SUCCESS !=
+            JxlDecoderGetColorAsICCProfile(dec, JXL_COLOR_PROFILE_TARGET_DATA, this->icc_buffer,
+                                           icc_size)) {
             jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
                                      "JxlDecoderGetColorAsICCProfile");
             return false;
@@ -92,20 +99,18 @@ public:
     }
 
     void imageDataFromCallback(const void *pixels, size_t x, size_t y, size_t num_pixels) {
-        skcms_Transform(
-                pixels, skcms_PixelFormat_RGBA_8888,
-                this->is_alpha_premultiplied ? skcms_AlphaFormat_PremulAsEncoded
-                                             : skcms_AlphaFormat_Unpremul,
-                &this->icc,
-                this->image_buffer + ((y * this->width + x) * 4),
-                skcms_PixelFormat_RGBA_8888, // Android is RGBA_8888
-                skcms_AlphaFormat_PremulAsEncoded,// Android need images with alpha to be premultiplied, otherwise it produce strange results.
-                skcms_sRGB_profile(), num_pixels);
+        skcms_Transform(pixels, this->sourcePixelFormat,
+                        this->is_alpha_premultiplied ? skcms_AlphaFormat_PremulAsEncoded
+                                                     : skcms_AlphaFormat_Unpremul, &this->icc,
+                        this->image_buffer + ((y * this->width + x) * 4),
+                        skcms_PixelFormat_RGBA_8888, // Android is RGBA_8888
+                        skcms_AlphaFormat_PremulAsEncoded,// Android need images with alpha to be premultiplied, otherwise it produce strange results.
+                        skcms_sRGB_profile(), num_pixels);
     }
 };
 
-void jxl_viewer_image_out_callback(void *opaque_data, size_t x, size_t y,
-                                   size_t num_pixels, const void *pixels) {
+void jxl_viewer_image_out_callback(void *opaque_data, size_t x, size_t y, size_t num_pixels,
+                                   const void *pixels) {
     ImageOutCallbackData *data = (ImageOutCallbackData *) opaque_data;
     data->imageDataFromCallback(pixels, x, y, num_pixels);
 }

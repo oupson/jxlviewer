@@ -1,6 +1,7 @@
 package fr.oupson.libjxl;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.drawable.AnimationDrawable;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
@@ -171,6 +172,24 @@ public class JxlDecodeAndroidUnitTest {
         Assert.assertThrows(NoSuchFileException.class, () -> {
             AnimationDrawable result = JxlDecoder.loadJxl(input);
         });
+    }
+
+    @Test
+    public void decodeThumbnails_shouldNotFail() throws IOException {
+        Context context = ApplicationProvider.getApplicationContext();
+
+        String[] assetList = new String[]{"didi.jxl", "ferris.jxl", "logo.jxl"};
+        for (String asset : assetList) {
+            InputStream inputStream = context.getAssets().open(asset);
+            try {
+                Bitmap result = JxlDecoder.loadThumbnail(inputStream);
+                Assert.assertNotNull(result);
+            } catch (Exception e) {
+                Assert.fail("Failed to read image : " + e.getMessage());
+            } finally {
+                inputStream.close();
+            }
+        }
     }
 
     // TODO: find a way to test icc profile errors

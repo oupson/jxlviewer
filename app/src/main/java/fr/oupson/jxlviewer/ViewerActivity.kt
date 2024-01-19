@@ -1,6 +1,7 @@
 package fr.oupson.jxlviewer
 
 import android.graphics.drawable.AnimationDrawable
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.util.Log
