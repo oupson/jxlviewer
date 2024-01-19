@@ -119,7 +119,7 @@ public class JxlDecodeAndroidUnitTest {
             AnimationDrawable result = JxlDecoder.loadJxl(new ByteArrayInputStream(content));
         });
 
-        Assert.assertEquals(DecodeError.DecodeErrorType.NeedMoreInputError, error.getErrorType());
+        Assert.assertEquals(DecodeError.DecodeErrorType.NEED_MORE_INPUT_ERROR, error.getErrorType());
     }
 
     @Test
@@ -129,7 +129,7 @@ public class JxlDecodeAndroidUnitTest {
         DecodeError error = Assert.assertThrows(DecodeError.class, () -> {
             AnimationDrawable result = JxlDecoder.loadJxl(input);
         });
-        Assert.assertEquals(DecodeError.DecodeErrorType.DecoderFailedError, error.getErrorType());
+        Assert.assertEquals(DecodeError.DecodeErrorType.DECODER_FAILED_ERROR, error.getErrorType());
     }
 
     @Test
