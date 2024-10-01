@@ -1,3 +1,6 @@
 [submodule "libjxl/src/main/cpp/third_party/libjxl"]
 	path = libjxl/src/main/cpp/third_party/libjxl
 	url = https://github.com/libjxl/libjxl.git
+[submodule "libjxl/src/main/cpp/third_party/skcms"]
+	path = libjxl/src/main/cpp/third_party/skcms
+	url = https://skia.googlesource.com/skcms.git

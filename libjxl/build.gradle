@@ -17,6 +17,7 @@ android {
             cmake {
                 cppFlags "-std=c++11"
                 targets "jxlreader"
+                arguments "-DANDROID_ARM_NEON=ON"
             }
         }
 
