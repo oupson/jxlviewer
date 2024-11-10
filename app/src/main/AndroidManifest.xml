@@ -16,7 +16,8 @@
         tools:targetApi="33">
         <activity
             android:name=".ViewerActivity"
-            android:exported="true">
+            android:exported="true"
+            android:colorMode="wideColorGamut">
             <intent-filter>
                 <!-- Intent filter to open the app from the launcher -->
                 <action android:name="android.intent.action.MAIN" />

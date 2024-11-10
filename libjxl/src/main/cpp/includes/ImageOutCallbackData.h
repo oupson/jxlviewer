@@ -28,7 +28,7 @@ private:
     skcms_PixelFormat sourcePixelFormat;
 
 public:
-    ImageOutCallbackData() : ImageOutCallbackData(skcms_PixelFormat_RGBA_8888) {
+    ImageOutCallbackData() : ImageOutCallbackData(skcms_PixelFormat_RGBA_hhhh) {
     }
 
     ImageOutCallbackData(skcms_PixelFormat sourcePixelFormat) : width(0), height(0),
@@ -102,8 +102,8 @@ public:
         skcms_Transform(pixels, this->sourcePixelFormat,
                         this->is_alpha_premultiplied ? skcms_AlphaFormat_PremulAsEncoded
                                                      : skcms_AlphaFormat_Unpremul, &this->icc,
-                        this->image_buffer + ((y * this->width + x) * 4),
-                        skcms_PixelFormat_RGBA_8888, // Android is RGBA_8888
+                        this->image_buffer + ((y * this->width + x) * 8),
+                        skcms_PixelFormat_RGBA_hhhh, // Convert to RGBA_F16
                         skcms_AlphaFormat_PremulAsEncoded,// Android need images with alpha to be premultiplied, otherwise it produce strange results.
                         skcms_sRGB_profile(), num_pixels);
     }

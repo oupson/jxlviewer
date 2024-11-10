@@ -28,7 +28,8 @@ Decoder::Decoder(JNIEnv *env) {
     this->createBitmapMethodId = env->GetStaticMethodID(this->bitmapClass, "createBitmap",
                                                         "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;");
 
-    jstring configName = env->NewStringUTF("ARGB_8888");
+    // TODO:
+    jstring configName = env->NewStringUTF("RGBA_F16");
     jclass bitmapConfigClass = env->FindClass("android/graphics/Bitmap$Config");
     jmethodID valueOfBitmapConfigFunction = env->GetStaticMethodID(bitmapConfigClass, "valueOf",
                                                                    "(Ljava/lang/String;)Landroid/graphics/Bitmap$Config;");
@@ -85,7 +86,7 @@ jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source) {
 
     JxlBasicInfo info;
     JxlFrameHeader frameHeader;
-    JxlPixelFormat format = {4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
+    JxlPixelFormat format = {4, JXL_TYPE_FLOAT16, JXL_NATIVE_ENDIAN, 0};
 
     uint8_t buffer[BUFFER_SIZE];
 

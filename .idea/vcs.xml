@@ -15,5 +15,6 @@
     <mapping directory="$PROJECT_DIR$/libjxl/src/main/cpp/third_party/libjxl/third_party/sjpeg" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/libjxl/src/main/cpp/third_party/libjxl/third_party/skcms" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/libjxl/src/main/cpp/third_party/libjxl/third_party/zlib" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libjxl/src/main/cpp/third_party/skcms" vcs="Git" />
   </component>
 </project>
