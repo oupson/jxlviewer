@@ -10,10 +10,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://jitpack.io" }
+        maven { setUrl("https://jitpack.io") }
     }
 }
 rootProject.name = "JxlViewer"
-include ':app'
-include ':libjxl'
-include ':libjxl_microbenchmark'
+include(":app")
+include(":libjxl")
+include(":libjxl_microbenchmark")
