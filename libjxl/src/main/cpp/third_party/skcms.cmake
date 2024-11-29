@@ -1,8 +1,5 @@
 function(link_skcms TARGET_NAME)
     target_sources(${TARGET_NAME} PRIVATE "${PROJECT_SOURCE_DIR}/third_party/skcms/skcms.cc")
-    target_sources(${TARGET_NAME} PRIVATE "${PROJECT_SOURCE_DIR}/third_party/skcms/src/skcms_TransformBaseline.cc")
-    target_sources(${TARGET_NAME} PRIVATE "${PROJECT_SOURCE_DIR}/third_party/skcms/src/skcms_TransformHsw.cc")
-    target_sources(${TARGET_NAME} PRIVATE "${PROJECT_SOURCE_DIR}/third_party/skcms/src/skcms_TransformSkx.cc")
 
     target_include_directories(${TARGET_NAME} PRIVATE "${PROJECT_SOURCE_DIR}/third_party/skcms/")
 
