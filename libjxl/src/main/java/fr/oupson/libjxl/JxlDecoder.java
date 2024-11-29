@@ -82,6 +82,9 @@ public class JxlDecoder {
         return loadThumbnailFromFd(this.nativeDecoderPtr, fileDescriptor.getFd());
     }
 
+    /**
+     * Options used by {@link JxlDecoder}.
+     */
     public static class Options implements AutoCloseable {
         static {
             System.loadLibrary("jxlreader");
@@ -111,6 +114,12 @@ public class JxlDecoder {
             super.finalize();
         }
 
+        /**
+         * Get the bitmap config used by the decoder.
+         *
+         * @return The {@link Bitmap.Config} used by the decoder.
+         * @throws ConfigException If the config return unsupported value (this should not happen).
+         */
         public Bitmap.Config getFormat() throws ConfigException {
             int config = getBitmapConfig(this.ptr);
             switch (config) {
@@ -127,6 +136,13 @@ public class JxlDecoder {
             }
         }
 
+        /**
+         * Set the bitmap config for the output bitmaps.
+         * Please note that only ARGB_8888 and RGBA_F16 are supported.
+         *
+         * @param config An ARGB_8888 or RGBA_F16 {@link Bitmap.Config}.
+         * @throws ConfigException When the config is not supported.
+         */
         public void setFormat(Bitmap.Config config) throws ConfigException {
             int format = 0;
             switch (config) {
