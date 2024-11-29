@@ -143,6 +143,7 @@ public class JxlDecoder {
         /**
          * Set the bitmap config for the output bitmaps.
          * Please note that only ARGB_8888 and RGBA_F16 are supported.
+         * ARGB_8888 by default.
          *
          * @param config An ARGB_8888 or RGBA_F16 {@link Bitmap.Config}.
          * @throws ConfigException When the config is not supported.
@@ -162,10 +163,23 @@ public class JxlDecoder {
             return this;
         }
 
+
+        /**
+         * Get if the decoder must decode multiple frames.
+         * Is true by default.
+         *
+         * @return True if the decoder will try to decode multiple values, false otherwise.
+         */
         public boolean getDecodeMultipleFrames() {
             return getDecodeMultipleFrames(this.ptr);
         }
 
+
+        /**
+         * Set if the decoder must decode multiple frames.
+         *
+         * @param decodeMultipleFrames True if the decoder will try to decode multiple values, false otherwise.
+         */
         public JxlDecoder.Options setDecodeMultipleFrames(boolean decodeMultipleFrames) {
             setDecodeMultipleFrames(this.ptr, decodeMultipleFrames);
             return this;
