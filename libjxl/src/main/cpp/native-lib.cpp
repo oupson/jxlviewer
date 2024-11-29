@@ -79,11 +79,27 @@ decoderOptionsGetBitmapConfig(JNIEnv * /* env */, jclass /* clazz */, jlong ptr)
     return options->rgbaConfig;
 }
 
-extern "C" JNIEXPORT void JNICALL
+void JNICALL
 decoderOptionsSetBitmapConfig(JNIEnv * /* env */, jclass /* clazz */, jlong ptr, jint format) {
     auto options = reinterpret_cast<Options *>(ptr);
     options->rgbaConfig = static_cast<BitmapConfig>(format);
 }
+
+
+jboolean JNICALL
+decoderOptionsGetDecodeMultipleFrames(JNIEnv * /* env */, jclass /* clazz */, jlong ptr) {
+    auto options = reinterpret_cast<Options *>(ptr);
+    return (options->decodeMultipleFrames) ? JNI_TRUE : JNI_FALSE;
+}
+
+
+void JNICALL
+decoderOptionsSetDecodeMultipleFrames(JNIEnv * /* env */, jclass /* clazz */, jlong ptr,
+                                      jboolean decodeMultipleFrames) {
+    auto options = reinterpret_cast<Options *>(ptr);
+    options->decodeMultipleFrames = decodeMultipleFrames == JNI_TRUE;
+}
+
 
 jint registerDecoderOptions(JNIEnv *env) noexcept {
     jclass classOptions = env->FindClass("fr/oupson/libjxl/JxlDecoder$Options");
@@ -91,10 +107,14 @@ jint registerDecoderOptions(JNIEnv *env) noexcept {
         return JNI_ERR;
     }
 
-    static const JNINativeMethod methods[] = {{"alloc",           "()J",   reinterpret_cast<void *>(decoderOptionsAlloc)},
-                                              {"free",            "(J)V",  reinterpret_cast<void *>(decoderOptionsFree)},
-                                              {"setBitmapConfig", "(JI)V", reinterpret_cast<void *>(decoderOptionsSetBitmapConfig)},
-                                              {"getBitmapConfig", "(J)I",  reinterpret_cast<void *>(decoderOptionsGetBitmapConfig)}};
+    static const JNINativeMethod methods[] = {
+            {"alloc",                   "()J",   reinterpret_cast<void *>(decoderOptionsAlloc)},
+            {"free",                    "(J)V",  reinterpret_cast<void *>(decoderOptionsFree)},
+            {"setBitmapConfig",         "(JI)V", reinterpret_cast<void *>(decoderOptionsSetBitmapConfig)},
+            {"getBitmapConfig",         "(J)I",  reinterpret_cast<void *>(decoderOptionsGetBitmapConfig)},
+            {"getDecodeMultipleFrames", "(J)Z",  reinterpret_cast<void *>(decoderOptionsGetDecodeMultipleFrames)},
+            {"setDecodeMultipleFrames", "(JZ)V", reinterpret_cast<void *>(decoderOptionsSetDecodeMultipleFrames)},
+    };
 
     return env->RegisterNatives(classOptions, methods, sizeof(methods) / sizeof(JNINativeMethod));
 }

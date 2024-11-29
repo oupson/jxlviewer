@@ -72,9 +72,10 @@ Decoder::~Decoder() {
 }
 
 jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options) {
-    jobject drawable = env->NewObject(drawableClass, drawableMethodID);
+    jobject drawable = nullptr;
     BitmapConfig btmConfigNative = (options != nullptr) ? options->rgbaConfig
                                                         : BitmapConfig::RGBA_8888;
+
     jobject bitmapConfig = (options != nullptr) ? ((options->rgbaConfig == 0)
                                                    ? this->bitmapConfigRgbaU8
                                                    : this->bitmapConfigRgbaF16)
@@ -132,6 +133,11 @@ jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options) {
                 jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetBasicInfo");
                 return nullptr;
             }
+
+            if (info.have_animation && (options == nullptr || options->decodeMultipleFrames)) {
+                drawable = env->NewObject(drawableClass, drawableMethodID);
+            }
+
             if (info.alpha_bits == 0) {
                 if (btmConfigNative == BitmapConfig::RGBA_8888) {
                     out_data.setSourcePixelFormat(skcms_PixelFormat_RGB_888);
@@ -163,13 +169,21 @@ jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options) {
         } else if (status == JXL_DEC_FULL_IMAGE) {
             AndroidBitmap_unlockPixels(env, btm);
 
-            auto btmDrawable = env->NewObject(bitmapDrawableClass, bitmapDrawableMethodID, btm);
-            uint32_t num = (info.animation.tps_numerator == 0) ? 1 : info.animation.tps_numerator;
-            env->CallVoidMethod(drawable, addDrawableMethodID, btmDrawable,
-                                (int) (frameHeader.duration * 1000 *
-                                       info.animation.tps_denominator / num));
+            if (drawable != nullptr) {
+                auto btmDrawable = env->NewObject(bitmapDrawableClass, bitmapDrawableMethodID, btm);
+                uint32_t num = (info.animation.tps_numerator == 0) ? 1
+                                                                   : info.animation.tps_numerator;
+                env->CallVoidMethod(drawable, addDrawableMethodID, btmDrawable,
+                                    (int) (frameHeader.duration * 1000 *
+                                           info.animation.tps_denominator / num));
+            }
         } else if (status == JXL_DEC_SUCCESS) {
-            return drawable;
+            if (drawable == nullptr) {
+                auto btmDrawable = env->NewObject(bitmapDrawableClass, bitmapDrawableMethodID, btm);
+                return btmDrawable;
+            } else {
+                return drawable;
+            }
         } else if (status == JXL_DEC_FRAME) {
             if (JXL_DEC_SUCCESS != JxlDecoderGetFrameHeader(dec.get(), &frameHeader)) {
                 jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetFrameHeader");

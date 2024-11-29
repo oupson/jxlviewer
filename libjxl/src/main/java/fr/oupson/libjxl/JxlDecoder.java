@@ -1,7 +1,7 @@
 package fr.oupson.libjxl;
 
 import android.graphics.Bitmap;
-import android.graphics.drawable.AnimationDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
 
@@ -31,11 +31,11 @@ public class JxlDecoder {
         return decoder;
     }
 
-    public static AnimationDrawable loadJxl(InputStream inputStream, Options options) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
+    public static Drawable loadJxl(InputStream inputStream, Options options) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
         return JxlDecoder.getInstance().decodeImage(inputStream, options);
     }
 
-    public static AnimationDrawable loadJxl(ParcelFileDescriptor fileDescriptor, Options options) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
+    public static Drawable loadJxl(ParcelFileDescriptor fileDescriptor, Options options) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
         return JxlDecoder.getInstance().decodeImage(fileDescriptor, options);
     }
 
@@ -51,9 +51,9 @@ public class JxlDecoder {
 
     private static native void freeNativeDecoderPtr(long nativeDecoderPtr);
 
-    private static native AnimationDrawable loadJxlFromInputStream(long nativeDecoderPtr, InputStream inputStream, long options) throws OutOfMemoryError, DecodeError, ClassNotFoundException;
+    private static native Drawable loadJxlFromInputStream(long nativeDecoderPtr, InputStream inputStream, long options) throws OutOfMemoryError, DecodeError, ClassNotFoundException;
 
-    private static native AnimationDrawable loadJxlFromFd(long nativeDecoderPtr, int fd, long options) throws OutOfMemoryError, DecodeError, ClassNotFoundException;
+    private static native Drawable loadJxlFromFd(long nativeDecoderPtr, int fd, long options) throws OutOfMemoryError, DecodeError, ClassNotFoundException;
 
     private static native Bitmap loadThumbnailFromInputStream(long nativeDecoderPtr, InputStream inputStream) throws OutOfMemoryError, DecodeError, ClassNotFoundException;
 
@@ -66,11 +66,11 @@ public class JxlDecoder {
         super.finalize();
     }
 
-    public AnimationDrawable decodeImage(InputStream inputStream, Options options) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
+    public Drawable decodeImage(InputStream inputStream, Options options) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
         return loadJxlFromInputStream(this.nativeDecoderPtr, inputStream, (options == null) ? 0 : options.ptr);
     }
 
-    public AnimationDrawable decodeImage(ParcelFileDescriptor fileDescriptor, Options options) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
+    public Drawable decodeImage(ParcelFileDescriptor fileDescriptor, Options options) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
         return loadJxlFromFd(this.nativeDecoderPtr, fileDescriptor.getFd(), (options == null) ? 0 : options.ptr);
     }
 
@@ -99,6 +99,10 @@ public class JxlDecoder {
         private static native int getBitmapConfig(long ptr);
 
         private static native void setBitmapConfig(long ptr, int format);
+
+        private static native boolean getDecodeMultipleFrames(long ptr);
+
+        private static native void setDecodeMultipleFrames(long ptr, boolean decodeMultipleFrames);
 
         @Override
         public void close() throws Exception {
@@ -143,7 +147,7 @@ public class JxlDecoder {
          * @param config An ARGB_8888 or RGBA_F16 {@link Bitmap.Config}.
          * @throws ConfigException When the config is not supported.
          */
-        public void setFormat(Bitmap.Config config) throws ConfigException {
+        public JxlDecoder.Options setFormat(Bitmap.Config config) throws ConfigException {
             int format = 0;
             switch (config) {
                 case ARGB_8888:
@@ -155,6 +159,16 @@ public class JxlDecoder {
                     throw new ConfigException("Only ARGB_8888 and RGBA_F16 are supported");
             }
             setBitmapConfig(this.ptr, format);
+            return this;
+        }
+
+        public boolean getDecodeMultipleFrames() {
+            return getDecodeMultipleFrames(this.ptr);
+        }
+
+        public JxlDecoder.Options setDecodeMultipleFrames(boolean decodeMultipleFrames) {
+            setDecodeMultipleFrames(this.ptr, decodeMultipleFrames);
+            return this;
         }
     }
 }

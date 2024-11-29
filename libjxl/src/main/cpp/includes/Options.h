@@ -11,6 +11,7 @@ enum BitmapConfig {
 class Options {
 public:
     BitmapConfig rgbaConfig = RGBA_8888;
+    bool decodeMultipleFrames = true;
 };
 
 #endif //JXLVIEWER_OPTIONS_H

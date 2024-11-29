@@ -2,6 +2,7 @@ package fr.oupson.jxlviewer
 
 import android.graphics.Bitmap
 import android.graphics.drawable.AnimationDrawable
+import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
@@ -34,8 +35,8 @@ class ViewerActivity : ComponentActivity() {
         } else {
             Bitmap.Config.ARGB_8888
         }
+        decodeMultipleFrames = true
     }
-
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,7 +73,7 @@ class ViewerActivity : ComponentActivity() {
 
                 withContext(Dispatchers.Main) {
                     binding.test.setImageDrawable(image)
-                    image?.start()
+                    (image as? AnimationDrawable)?.start()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load image", e)
@@ -88,11 +89,11 @@ class ViewerActivity : ComponentActivity() {
         }
     }
 
-    private fun loadImage(input: InputStream): AnimationDrawable? = input.use {
+    private fun loadImage(input: InputStream): Drawable? = input.use {
         JxlDecoder.loadJxl(it, decoderConfig)
     }
 
-    private fun loadImage(fd: ParcelFileDescriptor): AnimationDrawable? = fd.use {
+    private fun loadImage(fd: ParcelFileDescriptor): Drawable? = fd.use {
         JxlDecoder.loadJxl(it, decoderConfig)
     }
 

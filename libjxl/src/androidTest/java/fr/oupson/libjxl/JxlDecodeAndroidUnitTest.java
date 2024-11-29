@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.drawable.AnimationDrawable;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
 
@@ -21,6 +22,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.Objects;
 
+import fr.oupson.libjxl.exceptions.ConfigException;
 import fr.oupson.libjxl.exceptions.DecodeError;
 
 public class JxlDecodeAndroidUnitTest {
@@ -30,12 +32,10 @@ public class JxlDecodeAndroidUnitTest {
         InputStream input = context.getResources().getAssets().open("logo.jxl");
 
         try {
-            AnimationDrawable result = JxlDecoder.loadJxl(input, null);
+            BitmapDrawable result = (BitmapDrawable) JxlDecoder.loadJxl(input, null);
             Assert.assertNotNull(result);
-            Assert.assertEquals("Invalid number of frames", 1, result.getNumberOfFrames());
-            BitmapDrawable frame = (BitmapDrawable) result.getFrame(0);
-            Assert.assertEquals("Invalid image width", 1000, frame.getBitmap().getWidth());
-            Assert.assertEquals("Invalid image height", 1000, frame.getBitmap().getHeight());
+            Assert.assertEquals("Invalid image width", 1000, result.getBitmap().getWidth());
+            Assert.assertEquals("Invalid image height", 1000, result.getBitmap().getHeight());
         } catch (Exception e) {
             Assert.fail("Failed to read image : " + e.getMessage());
         }
@@ -47,12 +47,10 @@ public class JxlDecodeAndroidUnitTest {
         InputStream input = context.getResources().getAssets().open("didi.jxl");
 
         try {
-            AnimationDrawable result = JxlDecoder.loadJxl(input, null);
+            BitmapDrawable result = (BitmapDrawable) JxlDecoder.loadJxl(input, null);
             Assert.assertNotNull(result);
-            Assert.assertEquals("Invalid number of frames", 1, result.getNumberOfFrames());
-            BitmapDrawable frame = (BitmapDrawable) result.getFrame(0);
-            Assert.assertEquals("Invalid image width", 2048, frame.getBitmap().getWidth());
-            Assert.assertEquals("Invalid image height", 1536, frame.getBitmap().getHeight());
+            Assert.assertEquals("Invalid image width", 2048, result.getBitmap().getWidth());
+            Assert.assertEquals("Invalid image height", 1536, result.getBitmap().getHeight());
         } catch (Exception e) {
             Assert.fail("Failed to read image : " + e.getMessage());
         }
@@ -64,12 +62,50 @@ public class JxlDecodeAndroidUnitTest {
         InputStream input = context.getResources().getAssets().open("ferris.jxl");
 
         try {
-            AnimationDrawable result = JxlDecoder.loadJxl(input, null);
+            AnimationDrawable result = (AnimationDrawable) JxlDecoder.loadJxl(input, null);
             Assert.assertNotNull(result);
             Assert.assertEquals("Invalid number of frames", 27, result.getNumberOfFrames());
 
             for (int i = 0; i < 27; i++) {
                 BitmapDrawable frame = (BitmapDrawable) result.getFrame(i);
+                Assert.assertEquals("Invalid frame width", 378, frame.getBitmap().getWidth());
+                Assert.assertEquals("Invalid frame height", 300, frame.getBitmap().getHeight());
+            }
+        } catch (Exception e) {
+            Assert.fail("Failed to read image : " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void decode_FerrisWithDecodeMultipleFramesFalseShouldDecodeOneFrame() throws IOException {
+        Context context = ApplicationProvider.getApplicationContext();
+        InputStream input = context.getResources().getAssets().open("ferris.jxl");
+
+        try (JxlDecoder.Options options = new JxlDecoder.Options().setDecodeMultipleFrames(false)) {
+            Drawable result = JxlDecoder.loadJxl(input, options);
+            Assert.assertNotNull(result);
+            Assert.assertNotEquals(AnimationDrawable.class, result.getClass());
+        } catch (Exception e) {
+            Assert.fail("Failed to read image : " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void decode_FerrisWithDecodeMultipleFramesTrueShouldDecodeMultipleFrames() throws IOException {
+        Context context = ApplicationProvider.getApplicationContext();
+        InputStream input = context.getResources().getAssets().open("ferris.jxl");
+
+        try (JxlDecoder.Options options = new JxlDecoder.Options().setDecodeMultipleFrames(true)) {
+            Drawable result = JxlDecoder.loadJxl(input, options);
+            Assert.assertNotNull(result);
+            Assert.assertEquals(AnimationDrawable.class, result.getClass());
+
+            AnimationDrawable animation = (AnimationDrawable) result;
+
+            Assert.assertEquals("Invalid number of frames", 27, animation.getNumberOfFrames());
+
+            for (int i = 0; i < 27; i++) {
+                BitmapDrawable frame = (BitmapDrawable) animation.getFrame(i);
                 Assert.assertEquals("Invalid frame width", 378, frame.getBitmap().getWidth());
                 Assert.assertEquals("Invalid frame height", 300, frame.getBitmap().getHeight());
             }
@@ -91,7 +127,7 @@ public class JxlDecodeAndroidUnitTest {
         Uri androidUri = Uri.fromFile(testFile.toFile());
 
         try (ParcelFileDescriptor input = context.getContentResolver().openFileDescriptor(androidUri, "r")) {
-            AnimationDrawable result = JxlDecoder.loadJxl(Objects.requireNonNull(input), null);
+            AnimationDrawable result = (AnimationDrawable) JxlDecoder.loadJxl(Objects.requireNonNull(input), null);
             Assert.assertNotNull(result);
             Assert.assertEquals("Invalid number of frames", 27, result.getNumberOfFrames());
 
@@ -116,7 +152,7 @@ public class JxlDecodeAndroidUnitTest {
         input.close();
 
         DecodeError error = Assert.assertThrows(DecodeError.class, () -> {
-            AnimationDrawable result = JxlDecoder.loadJxl(new ByteArrayInputStream(content), null);
+            Drawable result = JxlDecoder.loadJxl(new ByteArrayInputStream(content), null);
         });
 
         Assert.assertEquals(DecodeError.DecodeErrorType.NeedMoreInputError, error.getErrorType());
@@ -127,7 +163,7 @@ public class JxlDecodeAndroidUnitTest {
         Context context = ApplicationProvider.getApplicationContext();
         InputStream input = context.getResources().getAssets().open("android.png");
         DecodeError error = Assert.assertThrows(DecodeError.class, () -> {
-            AnimationDrawable result = JxlDecoder.loadJxl(input, null);
+            Drawable result = JxlDecoder.loadJxl(input, null);
         });
         Assert.assertEquals(DecodeError.DecodeErrorType.DecoderFailedError, error.getErrorType());
     }
@@ -170,7 +206,7 @@ public class JxlDecodeAndroidUnitTest {
 
         // As input is marked finished, it is a decoder error and not an NeedMoreInputException
         Assert.assertThrows(NoSuchFileException.class, () -> {
-            AnimationDrawable result = JxlDecoder.loadJxl(input, null);
+            Drawable result = JxlDecoder.loadJxl(input, null);
         });
     }
 
@@ -193,4 +229,37 @@ public class JxlDecodeAndroidUnitTest {
     }
 
     // TODO: find a way to test icc profile errors
+
+    @Test
+    public void decoderOptions_getBitmapConfigShouldReturnSetConfig() throws Exception {
+        try (JxlDecoder.Options options = new JxlDecoder.Options()) {
+            options.setFormat(Bitmap.Config.ARGB_8888);
+            Assert.assertEquals(Bitmap.Config.ARGB_8888, options.getFormat());
+
+            options.setFormat(Bitmap.Config.RGBA_F16);
+            Assert.assertEquals(Bitmap.Config.RGBA_F16, options.getFormat());
+        }
+    }
+
+    @Test
+    public void decoderOptions_setBitmapConfigInvalidConfigShouldThrowException() throws Exception {
+        try (JxlDecoder.Options options = new JxlDecoder.Options()) {
+            Assert.assertThrows(ConfigException.class, () -> options.setFormat(Bitmap.Config.ALPHA_8));
+            Assert.assertThrows(ConfigException.class, () -> options.setFormat(Bitmap.Config.RGB_565));
+            Assert.assertThrows(ConfigException.class, () -> options.setFormat(Bitmap.Config.ARGB_4444));
+            Assert.assertThrows(ConfigException.class, () -> options.setFormat(Bitmap.Config.HARDWARE));
+            Assert.assertThrows(ConfigException.class, () -> options.setFormat(Bitmap.Config.RGBA_1010102));
+        }
+    }
+
+    @Test
+    public void decoderOptions_getDecodeMultipleFramesShouldReturnSetConfig() throws Exception {
+        try (JxlDecoder.Options options = new JxlDecoder.Options()) {
+            options.setDecodeMultipleFrames(false);
+            Assert.assertFalse(options.getDecodeMultipleFrames());
+
+            options.setDecodeMultipleFrames(true);
+            Assert.assertTrue(options.getDecodeMultipleFrames());
+        }
+    }
 }
