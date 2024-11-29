@@ -2,6 +2,7 @@ package fr.oupson.libjxl_microbenchmark;
 
 import android.content.Context;
 import android.graphics.drawable.AnimationDrawable;
+import android.graphics.drawable.Drawable;
 
 import androidx.benchmark.BenchmarkState;
 import androidx.benchmark.junit4.BenchmarkRule;
@@ -26,7 +27,7 @@ public class JxlDecoderBenchmark {
     public BenchmarkRule benchmarkRule = new BenchmarkRule();
 
     private void loadImage(byte[] content) throws DecodeError, ClassNotFoundException {
-        AnimationDrawable animationDrawable = JxlDecoder.loadJxl(new ByteArrayInputStream(content), null);
+        Drawable animationDrawable = JxlDecoder.loadJxl(new ByteArrayInputStream(content), null);
     }
 
     @Test
