@@ -11,6 +11,7 @@
 #include <skcms.h>
 #include <jni.h>
 #include "jxl/decode.h"
+#include <fstream>
 #include "Exception.h"
 
 class ImageOutCallbackData {
@@ -26,17 +27,28 @@ private:
     skcms_ICCProfile icc = {};
 
     skcms_PixelFormat sourcePixelFormat;
+    skcms_PixelFormat outputPixelFormat;
+    uint8_t sampleSize;
 
 public:
-    ImageOutCallbackData() : ImageOutCallbackData(skcms_PixelFormat_RGBA_hhhh) {
+    explicit ImageOutCallbackData(BitmapConfig format) : ImageOutCallbackData(format,
+                                                                              skcms_PixelFormat_RGBA_hhhh) {
     }
 
-    ImageOutCallbackData(skcms_PixelFormat sourcePixelFormat) : width(0), height(0),
-                                                                is_alpha_premultiplied(false),
-                                                                image_buffer(nullptr),
-                                                                icc_buffer(nullptr),
-                                                                sourcePixelFormat(
-                                                                        sourcePixelFormat) {}
+    ImageOutCallbackData(BitmapConfig format, skcms_PixelFormat sourcePixelFormat) : width(0),
+                                                                                     height(0),
+                                                                                     is_alpha_premultiplied(
+                                                                                             false),
+                                                                                     image_buffer(
+                                                                                             nullptr),
+                                                                                     icc_buffer(
+                                                                                             nullptr),
+                                                                                     sourcePixelFormat(
+                                                                                             sourcePixelFormat) {
+        this->outputPixelFormat = (format == BitmapConfig::RGBA_8888) ? skcms_PixelFormat_RGBA_8888
+                                                                      : skcms_PixelFormat_RGBA_hhhh;
+        this->sampleSize = (format == BitmapConfig::RGBA_8888) ? 4 : 8;
+    }
 
     ~ImageOutCallbackData() {
         if (icc_buffer != nullptr) {
@@ -102,8 +114,7 @@ public:
         skcms_Transform(pixels, this->sourcePixelFormat,
                         this->is_alpha_premultiplied ? skcms_AlphaFormat_PremulAsEncoded
                                                      : skcms_AlphaFormat_Unpremul, &this->icc,
-                        this->image_buffer + ((y * this->width + x) * 8),
-                        skcms_PixelFormat_RGBA_hhhh, // Convert to RGBA_F16
+                        this->image_buffer + ((y * this->width + x) * (this->sampleSize)), this->outputPixelFormat,
                         skcms_AlphaFormat_PremulAsEncoded,// Android need images with alpha to be premultiplied, otherwise it produce strange results.
                         skcms_sRGB_profile(), num_pixels);
     }
@@ -111,7 +122,7 @@ public:
 
 void jxl_viewer_image_out_callback(void *opaque_data, size_t x, size_t y, size_t num_pixels,
                                    const void *pixels) {
-    ImageOutCallbackData *data = (ImageOutCallbackData *) opaque_data;
+    auto *data = (ImageOutCallbackData *) opaque_data;
     data->imageDataFromCallback(pixels, x, y, num_pixels);
 }
 

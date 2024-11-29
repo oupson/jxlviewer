@@ -4,14 +4,16 @@
 #include <jni.h>
 
 #include "InputSource.h"
+#include "Options.h"
 
 class Decoder {
 public:
-    Decoder(JNIEnv *env);
+    explicit Decoder(JNIEnv *env);
 
     ~Decoder();
 
-    jobject DecodeJxl(JNIEnv *env, InputSource &source);
+    jobject DecodeJxl(JNIEnv *env, InputSource &source, Options* options);
+
     jobject DecodeJxlThumbnail(JNIEnv *env, InputSource &source);
 
 private:
@@ -27,7 +29,8 @@ private:
     jclass bitmapClass;
     jmethodID createBitmapMethodId;
 
-    jobject bitmapConfig;
+    jobject bitmapConfigRgbaU8;
+    jobject bitmapConfigRgbaF16;
 };
 
 #endif //JXLVIEWER_DECODER_H

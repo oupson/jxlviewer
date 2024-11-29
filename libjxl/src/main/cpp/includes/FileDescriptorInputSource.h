@@ -18,7 +18,7 @@ public:
 
     }
 
-    virtual int32_t read(uint8_t *buffer, size_t size) {
+    int32_t read(uint8_t *buffer, size_t size) override {
         return readWithErrorHandling(this->env, this->fd, buffer, size);
     }
 

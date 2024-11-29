@@ -30,7 +30,7 @@ public class JxlDecodeAndroidUnitTest {
         InputStream input = context.getResources().getAssets().open("logo.jxl");
 
         try {
-            AnimationDrawable result = JxlDecoder.loadJxl(input);
+            AnimationDrawable result = JxlDecoder.loadJxl(input, null);
             Assert.assertNotNull(result);
             Assert.assertEquals("Invalid number of frames", 1, result.getNumberOfFrames());
             BitmapDrawable frame = (BitmapDrawable) result.getFrame(0);
@@ -47,7 +47,7 @@ public class JxlDecodeAndroidUnitTest {
         InputStream input = context.getResources().getAssets().open("didi.jxl");
 
         try {
-            AnimationDrawable result = JxlDecoder.loadJxl(input);
+            AnimationDrawable result = JxlDecoder.loadJxl(input, null);
             Assert.assertNotNull(result);
             Assert.assertEquals("Invalid number of frames", 1, result.getNumberOfFrames());
             BitmapDrawable frame = (BitmapDrawable) result.getFrame(0);
@@ -64,7 +64,7 @@ public class JxlDecodeAndroidUnitTest {
         InputStream input = context.getResources().getAssets().open("ferris.jxl");
 
         try {
-            AnimationDrawable result = JxlDecoder.loadJxl(input);
+            AnimationDrawable result = JxlDecoder.loadJxl(input, null);
             Assert.assertNotNull(result);
             Assert.assertEquals("Invalid number of frames", 27, result.getNumberOfFrames());
 
@@ -91,7 +91,7 @@ public class JxlDecodeAndroidUnitTest {
         Uri androidUri = Uri.fromFile(testFile.toFile());
 
         try (ParcelFileDescriptor input = context.getContentResolver().openFileDescriptor(androidUri, "r")) {
-            AnimationDrawable result = JxlDecoder.loadJxl(Objects.requireNonNull(input));
+            AnimationDrawable result = JxlDecoder.loadJxl(Objects.requireNonNull(input), null);
             Assert.assertNotNull(result);
             Assert.assertEquals("Invalid number of frames", 27, result.getNumberOfFrames());
 
@@ -116,7 +116,7 @@ public class JxlDecodeAndroidUnitTest {
         input.close();
 
         DecodeError error = Assert.assertThrows(DecodeError.class, () -> {
-            AnimationDrawable result = JxlDecoder.loadJxl(new ByteArrayInputStream(content));
+            AnimationDrawable result = JxlDecoder.loadJxl(new ByteArrayInputStream(content), null);
         });
 
         Assert.assertEquals(DecodeError.DecodeErrorType.NeedMoreInputError, error.getErrorType());
@@ -127,7 +127,7 @@ public class JxlDecodeAndroidUnitTest {
         Context context = ApplicationProvider.getApplicationContext();
         InputStream input = context.getResources().getAssets().open("android.png");
         DecodeError error = Assert.assertThrows(DecodeError.class, () -> {
-            AnimationDrawable result = JxlDecoder.loadJxl(input);
+            AnimationDrawable result = JxlDecoder.loadJxl(input, null);
         });
         Assert.assertEquals(DecodeError.DecodeErrorType.DecoderFailedError, error.getErrorType());
     }
@@ -170,7 +170,7 @@ public class JxlDecodeAndroidUnitTest {
 
         // As input is marked finished, it is a decoder error and not an NeedMoreInputException
         Assert.assertThrows(NoSuchFileException.class, () -> {
-            AnimationDrawable result = JxlDecoder.loadJxl(input);
+            AnimationDrawable result = JxlDecoder.loadJxl(input, null);
         });
     }
 

@@ -1,7 +1,8 @@
 package fr.oupson.jxlviewer
 
+import android.graphics.Bitmap
 import android.graphics.drawable.AnimationDrawable
-import android.graphics.drawable.BitmapDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.util.Log
@@ -26,6 +27,16 @@ class ViewerActivity : ComponentActivity() {
     }
 
     private lateinit var binding: ActivityViewBinding
+
+    private val decoderConfig = JxlDecoder.Options().apply {
+        format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Bitmap.Config.RGBA_F16
+        } else {
+            Bitmap.Config.ARGB_8888
+        }
+    }
+
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,11 +89,11 @@ class ViewerActivity : ComponentActivity() {
     }
 
     private fun loadImage(input: InputStream): AnimationDrawable? = input.use {
-        JxlDecoder.loadJxl(it)
+        JxlDecoder.loadJxl(it, decoderConfig)
     }
 
     private fun loadImage(fd: ParcelFileDescriptor): AnimationDrawable? = fd.use {
-        JxlDecoder.loadJxl(it)
+        JxlDecoder.loadJxl(it, decoderConfig)
     }
 
     // Enable immersive mode.

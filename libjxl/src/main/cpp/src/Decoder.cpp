@@ -10,7 +10,7 @@
 #include "JniInputStream.h"
 #include "ImageOutCallbackData.h"
 
-Decoder::Decoder(JNIEnv *env) {
+Decoder::Decoder(JNIEnv *env) : vm(nullptr) {
     env->GetJavaVM(&this->vm);
     this->drawableClass = reinterpret_cast<jclass>(env->NewGlobalRef(
             env->FindClass("android/graphics/drawable/AnimationDrawable")));
@@ -28,14 +28,20 @@ Decoder::Decoder(JNIEnv *env) {
     this->createBitmapMethodId = env->GetStaticMethodID(this->bitmapClass, "createBitmap",
                                                         "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;");
 
-    // TODO:
-    jstring configName = env->NewStringUTF("RGBA_F16");
+    // ARGB_8888 is stored as RGBA_8888 in memory
+    jstring rgbaU8configName = env->NewStringUTF("ARGB_8888");
+    jstring rgbaF16configName = env->NewStringUTF("RGBA_F16");
     jclass bitmapConfigClass = env->FindClass("android/graphics/Bitmap$Config");
     jmethodID valueOfBitmapConfigFunction = env->GetStaticMethodID(bitmapConfigClass, "valueOf",
                                                                    "(Ljava/lang/String;)Landroid/graphics/Bitmap$Config;");
-    this->bitmapConfig = reinterpret_cast<jclass>(env->NewGlobalRef(
+
+    this->bitmapConfigRgbaU8 = reinterpret_cast<jclass>(env->NewGlobalRef(
             env->CallStaticObjectMethod(bitmapConfigClass, valueOfBitmapConfigFunction,
-                                        configName)));
+                                        rgbaU8configName)));
+
+    this->bitmapConfigRgbaF16 = reinterpret_cast<jclass>(env->NewGlobalRef(
+            env->CallStaticObjectMethod(bitmapConfigClass, valueOfBitmapConfigFunction,
+                                        rgbaF16configName)));
 }
 
 Decoder::~Decoder() {
@@ -57,15 +63,22 @@ Decoder::~Decoder() {
     env->DeleteGlobalRef(this->drawableClass);
     env->DeleteGlobalRef(this->bitmapDrawableClass);
     env->DeleteGlobalRef(this->bitmapClass);
-    env->DeleteGlobalRef(this->bitmapConfig);
+    env->DeleteGlobalRef(this->bitmapConfigRgbaU8);
+    env->DeleteGlobalRef(this->bitmapConfigRgbaF16);
 
     if (needToDetach) {
         this->vm->DetachCurrentThread();
     }
 }
 
-jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source) {
+jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options) {
     jobject drawable = env->NewObject(drawableClass, drawableMethodID);
+    BitmapConfig btmConfigNative = (options != nullptr) ? options->rgbaConfig
+                                                        : BitmapConfig::RGBA_8888;
+    jobject bitmapConfig = (options != nullptr) ? ((options->rgbaConfig == 0)
+                                                   ? this->bitmapConfigRgbaU8
+                                                   : this->bitmapConfigRgbaF16)
+                                                : this->bitmapConfigRgbaU8;
 
     // Multi-threaded parallel runner.
     auto runner = JxlResizableParallelRunnerMake(nullptr);
@@ -92,7 +105,7 @@ jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source) {
 
     jobject btm = nullptr;
 
-    ImageOutCallbackData out_data;
+    ImageOutCallbackData out_data(btmConfigNative);
 
     JxlDecoderStatus status = JXL_DEC_NEED_MORE_INPUT;
 
@@ -200,7 +213,7 @@ jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
     uint8_t buffer[BUFFER_SIZE];
 
     jobject btm = nullptr;
-    ImageOutCallbackData out_data;
+    ImageOutCallbackData out_data(BitmapConfig::RGBA_8888);
 
     JxlDecoderStatus status = JXL_DEC_NEED_MORE_INPUT;
 
@@ -228,7 +241,7 @@ jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
                 return nullptr;
             }
             if (info.alpha_bits == 0) {
-                out_data = ImageOutCallbackData(skcms_PixelFormat_RGB_888);
+                out_data = ImageOutCallbackData(BitmapConfig::RGBA_8888, skcms_PixelFormat_RGB_888);
                 format = JxlPixelFormat{3, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
             }
             out_data.setSize(info.xsize, info.ysize);
@@ -257,7 +270,7 @@ jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
 
             btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId,
                                               (int) out_data.getWidth(), (int) out_data.getHeight(),
-                                              bitmapConfig);
+                                              bitmapConfigRgbaU8);
 
             AndroidBitmap_lockPixels(env, btm,
                                      reinterpret_cast<void **>(out_data.getImageBufferPtr()));
