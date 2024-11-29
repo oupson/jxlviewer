@@ -132,6 +132,24 @@ jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options) {
                 jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetBasicInfo");
                 return nullptr;
             }
+            if (info.alpha_bits == 0) {
+                if (btmConfigNative == BitmapConfig::RGBA_8888) {
+                    out_data.setSourcePixelFormat(skcms_PixelFormat_RGB_888);
+                    format = {3, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
+                } else {
+                    out_data.setSourcePixelFormat(skcms_PixelFormat_RGB_hhh);
+                    format = {3, JXL_TYPE_FLOAT16, JXL_NATIVE_ENDIAN, 0};
+                }
+            } else {
+                if (btmConfigNative == BitmapConfig::RGBA_8888) {
+                    out_data.setSourcePixelFormat(skcms_PixelFormat_RGBA_8888);
+                    format = {4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
+                } else {
+                    out_data.setSourcePixelFormat(skcms_PixelFormat_RGBA_hhhh);
+                    format = {4, JXL_TYPE_FLOAT16, JXL_NATIVE_ENDIAN, 0};
+                }
+            }
+
             out_data.setSize(info.xsize, info.ysize);
             out_data.setIsAlphaPremultiplied(info.alpha_premultiplied);
             JxlResizableParallelRunnerSetThreads(runner.get(),

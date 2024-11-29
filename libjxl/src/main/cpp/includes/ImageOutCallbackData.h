@@ -57,6 +57,10 @@ public:
         }
     }
 
+    void setSourcePixelFormat(skcms_PixelFormat pixelFormat) {
+        this->sourcePixelFormat = pixelFormat;
+    }
+
     size_t getWidth() const {
         return width;
     }
@@ -114,7 +118,8 @@ public:
         skcms_Transform(pixels, this->sourcePixelFormat,
                         this->is_alpha_premultiplied ? skcms_AlphaFormat_PremulAsEncoded
                                                      : skcms_AlphaFormat_Unpremul, &this->icc,
-                        this->image_buffer + ((y * this->width + x) * (this->sampleSize)), this->outputPixelFormat,
+                        this->image_buffer + ((y * this->width + x) * (this->sampleSize)),
+                        this->outputPixelFormat,
                         skcms_AlphaFormat_PremulAsEncoded,// Android need images with alpha to be premultiplied, otherwise it produce strange results.
                         skcms_sRGB_profile(), num_pixels);
     }
