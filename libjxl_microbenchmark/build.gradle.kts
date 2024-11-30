@@ -19,25 +19,18 @@ android {
 
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
-
         testInstrumentationRunnerArguments["androidx.benchmark.profiling.mode"] = "StackSampling"
-
-        testInstrumentationRunner = "androidx.benchmark.junit4.AndroidBenchmarkRunner"
     }
 
     testBuildType = "release"
+
     buildTypes {
-        debug {
-            // Since debuggable can"t be modified by gradle for library modules,
-            // it must be done in a manifest - see src/androidTest/AndroidManifest.xml
-            isMinifyEnabled = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "benchmark-proguard-rules.pro"
-            )
-        }
-        release {
-            isDefault = true
+        getByName("release") {
+            // The androidx.benchmark plugin configures release buildType with proper settings, such as:
+            // - disables code coverage
+            // - adds CPU clock locking task
+            // - signs release buildType with debug signing config
+            // - copies benchmark results into build/outputs/connected_android_test_additional_output folder
         }
     }
 }
