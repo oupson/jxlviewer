@@ -1,25 +1,25 @@
 [versions]
 android-minSdk = "21"
-android-compileSdk = "34"
+android-compileSdk = "35"
 release-version = "0.4.0"
 release-versionCode = "5"
 
-agp = "8.6.1"
+agp = "8.7.2"
 
 kotlin = "1.9.22"
 
 junit = "4.13.2"
 
-androidx-appcompat = "1.6.1"
-androidx-benchmark = "1.2.2"
-androidx-constraintlayout = "2.1.4"
-androidx-core-ktx = "1.12.0"
-androidx-lifecycle = "2.6.2"
-androidx-test-espresso = "3.5.1"
-androidx-test-ext = "1.1.5"
-androidx-test-runner = "1.5.2"
+androidx-appcompat = "1.7.0"
+androidx-benchmark = "1.3.3"
+androidx-constraintlayout = "2.2.0"
+androidx-core-ktx = "1.15.0"
+androidx-lifecycle = "2.8.7"
+androidx-test-espresso = "3.6.1"
+androidx-test-ext = "1.2.1"
+androidx-test-runner = "1.6.2"
 
-google-material = "1.11.0"
+google-material = "1.12.0"
 
 photoview = "2.3.0"
 
