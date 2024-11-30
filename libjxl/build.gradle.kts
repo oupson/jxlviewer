@@ -1,15 +1,14 @@
 plugins {
-    id("com.android.library")
+    alias(libs.plugins.android.library)
     id("maven-publish")
 }
 
 android {
     namespace = "fr.oupson.libjxl"
-    compileSdk = 34
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        minSdk = 21
-        targetSdk = 34
+        minSdk = libs.versions.android.minSdk.get().toInt()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles ("consumer-rules.pro")
@@ -57,9 +56,9 @@ android {
 }
 
 dependencies {
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.espresso)
 }
 
 publishing {
@@ -69,7 +68,7 @@ publications {
             pom {
                 groupId = "fr.oupson"
                 artifactId = "libjxl"
-                version = "0.4.0"
+                version = libs.versions.release.version.get()
 
                 afterEvaluate {
                     from(components["release"])

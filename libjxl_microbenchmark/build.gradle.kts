@@ -1,12 +1,12 @@
 plugins {
-    id("com.android.library")
-    id("androidx.benchmark")
-    id("org.jetbrains.kotlin.android")
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.androidx.benchmark)
+    alias(libs.plugins.kotlin.android)
 }
 
 android {
     namespace = "fr.oupson.libjxl_microbenchmark"
-    compileSdk = 34
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -18,8 +18,7 @@ android {
     }
 
     defaultConfig {
-        minSdk = 21
-        targetSdk = 34
+        minSdk = libs.versions.android.minSdk.get().toInt()
 
         testInstrumentationRunnerArguments["androidx.benchmark.profiling.mode"] = "StackSampling"
 
@@ -32,7 +31,10 @@ android {
             // Since debuggable can"t be modified by gradle for library modules,
             // it must be done in a manifest - see src/androidTest/AndroidManifest.xml
             isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "benchmark-proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "benchmark-proguard-rules.pro"
+            )
         }
         release {
             isDefault = true
@@ -41,10 +43,10 @@ android {
 }
 
 dependencies {
-    androidTestImplementation("androidx.test:runner:1.5.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.benchmark:benchmark-junit4:1.2.2")
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.benchmark.junit)
 
     androidTestImplementation(project(":libjxl"))
 }
