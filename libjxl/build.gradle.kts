@@ -1,6 +1,9 @@
+import com.vanniktech.maven.publish.SonatypeHost
+
 plugins {
     alias(libs.plugins.android.library)
     id("maven-publish")
+    alias(libs.plugins.vanniktech.maven.publish)
 }
 
 android {
@@ -11,7 +14,7 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        consumerProguardFiles ("consumer-rules.pro")
+        consumerProguardFiles("consumer-rules.pro")
         externalNativeBuild {
             cmake {
                 cppFlags("-std=c++11")
@@ -34,8 +37,7 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             )
         }
     }
@@ -49,7 +51,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_1_8
     }
     publishing {
-        singleVariant("release") {
+        multipleVariants {
             withSourcesJar()
         }
     }
@@ -61,19 +63,37 @@ dependencies {
     androidTestImplementation(libs.androidx.test.espresso)
 }
 
-publishing {
-
-publications {
-        create<MavenPublication>("relocation") {
-            pom {
-                groupId = "fr.oupson"
-                artifactId = "libjxl"
-                version = libs.versions.release.version.get()
-
-                afterEvaluate {
-                    from(components["release"])
-                }
-            }
+fun MavenPom.configure() {
+    name.set("libjxl")
+    description.set("A JPEG-XL decoding library for android.")
+    url.set("https://github.com/oupson/jxlviewer/")
+    version = libs.versions.release.version.get()
+    licenses {
+        license {
+            name.set("MIT License")
+            url.set("https://mit-license.org/")
+            distribution.set("https://mit-license.org/")
         }
+    }
+    developers {
+        developer {
+            id.set("oupson")
+            name.set("oupson")
+            url.set("https://github.com/oupson/")
+        }
+    }
+    scm {
+        url.set("https://github.com/oupson/jxlviewer/")
+        connection.set("scm:git:git://github.com/oupson/jxlviewer.git")
+        developerConnection.set("scm:git:https://github.com/oupson/jxlviewer.git")
+    }
+}
+
+mavenPublishing {
+    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
+    signAllPublications()
+    coordinates("fr.oupson", "libjxl", libs.versions.release.version.get())
+    pom {
+        this.configure()
     }
 }
