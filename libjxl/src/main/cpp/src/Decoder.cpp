@@ -30,7 +30,6 @@ Decoder::Decoder(JNIEnv *env) : vm(nullptr) {
 
     // ARGB_8888 is stored as RGBA_8888 in memory
     jstring rgbaU8configName = env->NewStringUTF("ARGB_8888");
-    jstring rgbaF16configName = env->NewStringUTF("RGBA_F16");
     jclass bitmapConfigClass = env->FindClass("android/graphics/Bitmap$Config");
     jmethodID valueOfBitmapConfigFunction = env->GetStaticMethodID(bitmapConfigClass, "valueOf",
                                                                    "(Ljava/lang/String;)Landroid/graphics/Bitmap$Config;");
@@ -39,9 +38,12 @@ Decoder::Decoder(JNIEnv *env) : vm(nullptr) {
             env->CallStaticObjectMethod(bitmapConfigClass, valueOfBitmapConfigFunction,
                                         rgbaU8configName)));
 
-    this->bitmapConfigRgbaF16 = reinterpret_cast<jclass>(env->NewGlobalRef(
-            env->CallStaticObjectMethod(bitmapConfigClass, valueOfBitmapConfigFunction,
-                                        rgbaF16configName)));
+    if (android_get_device_api_level() >= 26) {
+        jstring rgbaF16configName = env->NewStringUTF("RGBA_F16");
+        this->bitmapConfigRgbaF16 = reinterpret_cast<jclass>(env->NewGlobalRef(
+                env->CallStaticObjectMethod(bitmapConfigClass, valueOfBitmapConfigFunction,
+                                            rgbaF16configName)));
+    }
 }
 
 Decoder::~Decoder() {
