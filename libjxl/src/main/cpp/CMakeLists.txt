@@ -31,3 +31,5 @@ target_link_libraries(
         jxl_dec jxl_threads)
 
 link_skcms(jxlreader)
+
+add_link_options("WL,--build-id=none")
