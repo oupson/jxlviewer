@@ -33,3 +33,4 @@ target_link_libraries(
 link_skcms(jxlreader)
 
 add_link_options("WL,--build-id=none")
+target_link_options(jxlreader PUBLIC "-Wl,--build-id=none")
