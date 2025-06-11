@@ -3,6 +3,8 @@
 /workspace.xml
 
 deploymentTargetDropDown.xml
+deploymentTargetSelector.xml
+runConfigurations.xml
 androidTestResultsUserPreferences.xml
 
 /gradle.xml
