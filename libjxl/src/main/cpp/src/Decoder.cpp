@@ -9,24 +9,26 @@
 #include "Exception.h"
 #include "JniInputStream.h"
 #include "ImageOutCallbackData.h"
+#include <android/log.h>
 
 Decoder::Decoder(JNIEnv *env) : vm(nullptr) {
     env->GetJavaVM(&this->vm);
-    this->drawableClass = reinterpret_cast<jclass>(env->NewGlobalRef(
-            env->FindClass("android/graphics/drawable/AnimationDrawable")));
-    this->drawableMethodID = env->GetMethodID(this->drawableClass, "<init>", "()V");
-    this->addDrawableMethodID = env->GetMethodID(this->drawableClass, "addFrame",
-                                                 "(Landroid/graphics/drawable/Drawable;I)V");
-
-    this->bitmapDrawableClass = reinterpret_cast<jclass>(env->NewGlobalRef(
-            env->FindClass("android/graphics/drawable/BitmapDrawable")));
-    this->bitmapDrawableMethodID = env->GetMethodID(this->bitmapDrawableClass, "<init>",
-                                                    "(Landroid/graphics/Bitmap;)V");
 
     this->bitmapClass = reinterpret_cast<jclass>(env->NewGlobalRef(
             env->FindClass("android/graphics/Bitmap")));
     this->createBitmapMethodId = env->GetStaticMethodID(this->bitmapClass, "createBitmap",
                                                         "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;");
+
+
+    this->callbackClass = reinterpret_cast<jclass>(env->NewGlobalRef(
+            env->FindClass("fr/oupson/libjxl/JxlDecoder$Callback")));
+
+    this->callbackOnHeaderDecoded = env->GetMethodID(this->callbackClass, "onHeaderDecoded",
+                                                     "(IIIIZI)Z");
+    this->callbackOnProgressiveFrame = env->GetMethodID(this->callbackClass, "onProgressiveFrame",
+                                                        "(Landroid/graphics/Bitmap;)Z");
+    this->callbackOnFrameDecoded = env->GetMethodID(this->callbackClass, "onFrameDecoded",
+                                                    "(ILandroid/graphics/Bitmap;)Z");
 
     // ARGB_8888 is stored as RGBA_8888 in memory
     jstring rgbaU8configName = env->NewStringUTF("ARGB_8888");
@@ -62,19 +64,18 @@ Decoder::~Decoder() {
         return;
     }
 
-    env->DeleteGlobalRef(this->drawableClass);
-    env->DeleteGlobalRef(this->bitmapDrawableClass);
     env->DeleteGlobalRef(this->bitmapClass);
     env->DeleteGlobalRef(this->bitmapConfigRgbaU8);
     env->DeleteGlobalRef(this->bitmapConfigRgbaF16);
+
+    env->DeleteGlobalRef(this->callbackClass);
 
     if (needToDetach) {
         this->vm->DetachCurrentThread();
     }
 }
 
-jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options) {
-    jobject drawable = nullptr;
+int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobject callback) {
     BitmapConfig btmConfigNative = (options != nullptr) ? options->rgbaConfig
                                                         : BitmapConfig::RGBA_8888;
 
@@ -83,21 +84,31 @@ jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options) {
                                                    : this->bitmapConfigRgbaF16)
                                                 : this->bitmapConfigRgbaU8;
 
+
+
     // Multi-threaded parallel runner.
     auto runner = JxlResizableParallelRunnerMake(nullptr);
 
+    auto events = JXL_DEC_BASIC_INFO | JXL_DEC_FRAME;
+
+    if (options->decodeFrames) {
+        events = events | JXL_DEC_COLOR_ENCODING | JXL_DEC_FULL_IMAGE;
+    }
+
+    if (options->decodeProgressive) {
+        events = events | JXL_DEC_FRAME_PROGRESSION;
+    }
+
     auto dec = JxlDecoderMake(nullptr);
-    if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec.get(),
-                                                     JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE |
-                                                     JXL_DEC_FRAME | JXL_DEC_COLOR_ENCODING)) {
+    if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec.get(), events)) {
         jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSubscribeEvents");
-        return nullptr;
+        return -1;
     }
 
     if (JXL_DEC_SUCCESS !=
         JxlDecoderSetParallelRunner(dec.get(), JxlResizableParallelRunner, runner.get())) {
         jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetParallelRunner");
-        return nullptr;
+        return -1;
     }
 
     JxlBasicInfo info;
@@ -112,32 +123,30 @@ jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options) {
 
     JxlDecoderStatus status = JXL_DEC_NEED_MORE_INPUT;
 
+    int nbr_frames = 0;
+
     for (;;) {
         if (status == JXL_DEC_ERROR) {
             jxlviewer::throwNewError(env, DECODER_FAILED_ERROR);
-            return nullptr;
+            return -1;
         } else if (status == JXL_DEC_NEED_MORE_INPUT) {
             auto remaining = JxlDecoderReleaseInput(dec.get()); // TODO REMAINING TEST
             auto readSize = source.read(buffer + remaining, sizeof(buffer) - remaining);
             if (readSize == -1) {
                 jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
-                return nullptr;
+                return -1;
             } else if (readSize == INT32_MIN) {
-                return nullptr;
+                return nbr_frames;
             } else {
                 if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec.get(), buffer, readSize)) {
                     jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetInput");
-                    return nullptr;
+                    return -1;
                 }
             }
         } else if (status == JXL_DEC_BASIC_INFO) {
             if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(dec.get(), &info)) {
                 jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetBasicInfo");
-                return nullptr;
-            }
-
-            if (info.have_animation && (options == nullptr || options->decodeMultipleFrames)) {
-                drawable = env->NewObject(drawableClass, drawableMethodID);
+                return -1;
             }
 
             if (info.alpha_bits == 0) {
@@ -163,168 +172,122 @@ jobject Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options) {
             JxlResizableParallelRunnerSetThreads(runner.get(),
                                                  JxlResizableParallelRunnerSuggestThreads(
                                                          info.xsize, info.ysize));
+
+            auto continueDecoding = env->CallBooleanMethod(callback, this->callbackOnHeaderDecoded,
+                                                           info.xsize, info.ysize,
+                                                           info.intrinsic_xsize,
+                                                           info.intrinsic_ysize,
+                                                           (info.have_animation) ? JNI_TRUE
+                                                                                 : JNI_FALSE,
+                                                           (int) info.orientation);
+            if (env->ExceptionCheck() == JNI_TRUE) {
+                return -1;
+            }
+
+            if (continueDecoding != JNI_TRUE) {
+                return nbr_frames;
+            }
         } else if (status == JXL_DEC_COLOR_ENCODING) {
             if (!out_data.parseICCProfile(env, dec.get())) {
-                return nullptr;
+                return -1;
             }
         } else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
-        } else if (status == JXL_DEC_FULL_IMAGE) {
-            AndroidBitmap_unlockPixels(env, btm);
-
-            if (drawable != nullptr) {
-                auto btmDrawable = env->NewObject(bitmapDrawableClass, bitmapDrawableMethodID, btm);
-                uint32_t num = (info.animation.tps_numerator == 0) ? 1
-                                                                   : info.animation.tps_numerator;
-                env->CallVoidMethod(drawable, addDrawableMethodID, btmDrawable,
-                                    (int) (frameHeader.duration * 1000 *
-                                           info.animation.tps_denominator / num));
-            }
-        } else if (status == JXL_DEC_SUCCESS) {
-            if (drawable == nullptr) {
-                auto btmDrawable = env->NewObject(bitmapDrawableClass, bitmapDrawableMethodID, btm);
-                return btmDrawable;
-            } else {
-                return drawable;
-            }
-        } else if (status == JXL_DEC_FRAME) {
-            if (JXL_DEC_SUCCESS != JxlDecoderGetFrameHeader(dec.get(), &frameHeader)) {
-                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetFrameHeader");
-                return nullptr;
-            }
-
-            btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId,
-                                              (int) out_data.getWidth(), (int) out_data.getHeight(),
-                                              bitmapConfig);
-
-            AndroidBitmap_lockPixels(env, btm,
-                                     reinterpret_cast<void **>(out_data.getImageBufferPtr()));
-
-            if (JXL_DEC_SUCCESS !=
-                JxlDecoderSetImageOutCallback(dec.get(), &format, jxl_viewer_image_out_callback,
-                                              &out_data)) {
-                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
-                                         "JxlDecoderSetImageOutCallback");
-                return nullptr;
-            }
-        } else {
-            jxlviewer::throwNewError(env, OTHER_ERROR_TYPE, "Unknown decoder status");
-            return nullptr;
-        }
-        status = JxlDecoderProcessInput(dec.get());
-    }
-}
-
-// TODO: image preview when supported
-jobject Decoder::DecodeJxlThumbnail(JNIEnv *env, InputSource &source) {
-    // Multi-threaded parallel runner.
-    auto runner = JxlResizableParallelRunnerMake(nullptr);
-
-    auto dec = JxlDecoderMake(nullptr);
-    if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec.get(),
-                                                     JXL_DEC_BASIC_INFO | JXL_DEC_FULL_IMAGE |
-                                                     JXL_DEC_FRAME | JXL_DEC_COLOR_ENCODING |
-                                                     JXL_DEC_FRAME_PROGRESSION)) {
-        jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSubscribeEvents");
-        return nullptr;
-    }
-
-    if (JXL_DEC_SUCCESS !=
-        JxlDecoderSetParallelRunner(dec.get(), JxlResizableParallelRunner, runner.get())) {
-        jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetParallelRunner");
-        return nullptr;
-    }
-
-    if (JXL_DEC_SUCCESS !=
-        JxlDecoderSetProgressiveDetail(dec.get(), JxlProgressiveDetail::kLastPasses)) {
-        jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetProgressiveDetail");
-        return nullptr;
-    }
-
-    JxlBasicInfo info;
-    JxlFrameHeader frameHeader;
-    JxlPixelFormat format = {4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
-
-    uint8_t buffer[BUFFER_SIZE];
-
-    jobject btm = nullptr;
-    ImageOutCallbackData out_data(BitmapConfig::RGBA_8888);
-
-    JxlDecoderStatus status = JXL_DEC_NEED_MORE_INPUT;
-
-    for (;;) {
-        if (status == JXL_DEC_ERROR) {
-            jxlviewer::throwNewError(env, DECODER_FAILED_ERROR);
-            return nullptr;
-        } else if (status == JXL_DEC_NEED_MORE_INPUT) {
-            auto remaining = JxlDecoderReleaseInput(dec.get()); // TODO REMAINING TEST
-            auto readSize = source.read(buffer + remaining, sizeof(buffer) - remaining);
-            if (readSize == -1) {
-                jxlviewer::throwNewError(env, NEED_MORE_INPUT_ERROR);
-                return nullptr;
-            } else if (readSize == INT32_MIN) {
-                return nullptr;
-            } else {
-                if (JXL_DEC_SUCCESS != JxlDecoderSetInput(dec.get(), buffer, readSize)) {
-                    jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderSetInput");
-                    return nullptr;
+            if (!options->decodeFrames) {
+                if (JXL_DEC_SUCCESS != JxlDecoderSkipCurrentFrame(dec.get())) {
+                    jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
+                                             "JxlDecoderSkipCurrentFrame");
+                    return -1;
                 }
             }
-        } else if (status == JXL_DEC_BASIC_INFO) {
-            if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(dec.get(), &info)) {
-                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetBasicInfo");
-                return nullptr;
-            }
-            if (info.alpha_bits == 0) {
-                out_data = ImageOutCallbackData(BitmapConfig::RGBA_8888, skcms_PixelFormat_RGB_888);
-                format = JxlPixelFormat{3, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
-            }
-            out_data.setSize(info.xsize, info.ysize);
-            out_data.setIsAlphaPremultiplied(info.alpha_premultiplied);
-            JxlResizableParallelRunnerSetThreads(runner.get(),
-                                                 JxlResizableParallelRunnerSuggestThreads(
-                                                         info.xsize, info.ysize));
-        } else if (status == JXL_DEC_COLOR_ENCODING) {
-            if (!out_data.parseICCProfile(env, dec.get())) {
-                return nullptr;
-            }
-        } else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
         } else if (status == JXL_DEC_FULL_IMAGE) {
             AndroidBitmap_unlockPixels(env, btm);
 
-            JxlDecoderCloseInput(dec.get());
-            return btm;
+            int delay = 0;
+            if (info.have_animation) {
+                uint32_t num = (info.animation.tps_numerator == 0) ? 1
+                                                                   : info.animation.tps_numerator;
+                delay = (int) (frameHeader.duration * 1000 * info.animation.tps_denominator / num);
+            }
+
+            const auto continueDecoding =
+                    env->CallBooleanMethod(callback, this->callbackOnFrameDecoded, delay, btm) ==
+                    JNI_TRUE;
+
+            if (env->ExceptionCheck() == JNI_TRUE) {
+                return -1;
+            }
+
+            nbr_frames += 1;
+
+            if (!continueDecoding) {
+                return nbr_frames;
+            }
         } else if (status == JXL_DEC_SUCCESS) {
-            AndroidBitmap_unlockPixels(env, btm);
-            return btm;
+            return nbr_frames;
         } else if (status == JXL_DEC_FRAME) {
-            if (JXL_DEC_SUCCESS != JxlDecoderGetFrameHeader(dec.get(), &frameHeader)) {
-                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR, "JxlDecoderGetFrameHeader");
-                return nullptr;
+            if (options->decodeFrames) {
+                if (JXL_DEC_SUCCESS != JxlDecoderGetFrameHeader(dec.get(), &frameHeader)) {
+                    jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
+                                             "JxlDecoderGetFrameHeader");
+                    return -1;
+                }
+
+                if (btm == nullptr) {
+                    btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId,
+                                                      (int) out_data.getWidth(),
+                                                      (int) out_data.getHeight(), bitmapConfig);
+                    if (env->ExceptionCheck() == JNI_TRUE) {
+                        return -1;
+                    }
+                }
+
+                if (AndroidBitmap_lockPixels(env, btm,
+                                             reinterpret_cast<void **>(out_data.getImageBufferPtr())) !=
+                    ANDROID_BITMAP_RESULT_SUCCESS) {
+                    jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
+                                             "AndroidBitmap_lockPixels");
+                    return -1;
+                }
+
+                if (JXL_DEC_SUCCESS !=
+                    JxlDecoderSetImageOutCallback(dec.get(), &format, jxl_viewer_image_out_callback,
+                                                  &out_data)) {
+                    jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
+                                             "JxlDecoderSetImageOutCallback");
+                    return -1;
+                }
+            } else {
+                nbr_frames += 1;
             }
-
-            btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId,
-                                              (int) out_data.getWidth(), (int) out_data.getHeight(),
-                                              bitmapConfigRgbaU8);
-
-            AndroidBitmap_lockPixels(env, btm,
-                                     reinterpret_cast<void **>(out_data.getImageBufferPtr()));
-
-            if (JXL_DEC_SUCCESS !=
-                JxlDecoderSetImageOutCallback(dec.get(), &format, jxl_viewer_image_out_callback,
-                                              &out_data)) {
-                jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
-                                         "JxlDecoderSetImageOutCallback");
-                return nullptr;
-            }
-            JxlDecoderFlushImage(dec.get());
         } else if (status == JXL_DEC_FRAME_PROGRESSION) {
-            JxlDecoderFlushImage(dec.get());
-            JxlDecoderSkipCurrentFrame(dec.get());
+            if (options->decodeProgressive) {
+                if (JXL_DEC_SUCCESS == JxlDecoderFlushImage(dec.get())) {
+                    AndroidBitmap_unlockPixels(env, btm);
+
+                    auto continueDecoding = env->CallBooleanMethod(callback,
+                                                                   this->callbackOnProgressiveFrame,
+                                                                   btm);
+                    if (env->ExceptionCheck() == JNI_TRUE) {
+                        return -1;
+                    }
+
+                    if (continueDecoding != JNI_TRUE) {
+                        return nbr_frames;
+                    } else {
+                        if (AndroidBitmap_lockPixels(env, btm,
+                                                     reinterpret_cast<void **>(out_data.getImageBufferPtr())) !=
+                            ANDROID_BITMAP_RESULT_SUCCESS) {
+                            jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
+                                                     "AndroidBitmap_lockPixels");
+                            return -1;
+                        }
+                    }
+                };
+            }
         } else {
             jxlviewer::throwNewError(env, OTHER_ERROR_TYPE, "Unknown decoder status");
-            return nullptr;
+            return -1;
         }
-
         status = JxlDecoderProcessInput(dec.get());
     }
 }

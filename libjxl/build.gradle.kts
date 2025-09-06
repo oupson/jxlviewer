@@ -1,5 +1,3 @@
-import com.vanniktech.maven.publish.SonatypeHost
-
 plugins {
     alias(libs.plugins.android.library)
     id("maven-publish")
@@ -19,7 +17,7 @@ android {
             cmake {
                 cppFlags("-std=c++11")
                 targets("jxlreader")
-                arguments("-DANDROID_ARM_NEON=ON")
+                arguments("-DANDROID_ARM_NEON=ON", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON")
             }
         }
 
@@ -37,7 +35,8 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
             )
         }
     }
@@ -90,7 +89,7 @@ fun MavenPom.configure() {
 }
 
 mavenPublishing {
-    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
+    publishToMavenCentral()
     signAllPublications()
     coordinates("fr.oupson", "libjxl", libs.versions.release.version.get())
     pom {
