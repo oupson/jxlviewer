@@ -4,39 +4,29 @@ import android.graphics.Bitmap;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import java.io.InputStream;
 
 import fr.oupson.libjxl.exceptions.ConfigException;
 import fr.oupson.libjxl.exceptions.DecodeError;
 
-// TODO: Nullable annotations
-public class JxlDecoder {
-    private static JxlDecoder decoder = null;
 
+public class JxlDecoder {
     static {
         System.loadLibrary("jxlreader");
     }
 
     private long nativeDecoderPtr;
 
-    JxlDecoder() {
+    /**
+     * Construct a new decoder.
+     * This is a costly operation, you should reuse it.
+     * <p>The decoder support parallel decoding.</p>
+     */
+    public JxlDecoder() {
         this.nativeDecoderPtr = getNativeDecoderPtr();
-    }
-
-    public static synchronized JxlDecoder getInstance() {
-        if (decoder == null) {
-            decoder = new JxlDecoder();
-        }
-
-        return decoder;
-    }
-
-    public static int loadJxl(InputStream inputStream, Options options, Callback callback) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
-        return JxlDecoder.getInstance().decodeImage(inputStream, options, callback);
-    }
-
-    public static int loadJxl(ParcelFileDescriptor fileDescriptor, Options options, Callback callback) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
-        return JxlDecoder.getInstance().decodeImage(fileDescriptor, options, callback);
     }
 
     private static native long getNativeDecoderPtr();
@@ -54,20 +44,69 @@ public class JxlDecoder {
         super.finalize();
     }
 
-    public int decodeImage(InputStream inputStream, Options options, Callback callback) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
+    /**
+     * Decode an image from an input stream.
+     * <p>For better performance you should probably use {@link JxlDecoder#decodeImage(ParcelFileDescriptor, Options, Callback)}.</p>
+     *
+     * @param inputStream file data.
+     * @param options to customise the decoding.
+     * @param callback to receive frames and other events.
+     * @return number of frame decoded.
+     * @throws OutOfMemoryError not enough memory for decoding.
+     * @throws DecodeError file is not a valid jpeg xl file.
+     * @throws ClassNotFoundException a class was not found, this should not happen.
+     */
+    public int decodeImage(@NonNull InputStream inputStream, @Nullable Options options, @NonNull Callback callback) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
         return loadJxlFromInputStream(this.nativeDecoderPtr, inputStream, (options == null) ? 0 : options.ptr, callback);
     }
 
-    public int decodeImage(ParcelFileDescriptor fileDescriptor, Options options, Callback callback) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
-       return  loadJxlFromFd(this.nativeDecoderPtr, fileDescriptor.getFd(), (options == null) ? 0 : options.ptr, callback);
+    /**
+     * Decode an image from an input stream.
+     *
+     * @param fileDescriptor file data.
+     * @param options to customise the decoding.
+     * @param callback to receive frames and other events.
+     * @return number of frame decoded.
+     * @throws OutOfMemoryError not enough memory for decoding.
+     * @throws DecodeError file is not a valid jpeg xl file.
+     * @throws ClassNotFoundException a class was not found, this should not happen.
+     */
+    public int decodeImage(@NonNull ParcelFileDescriptor fileDescriptor, @Nullable Options options, @NonNull Callback callback) throws OutOfMemoryError, DecodeError, ClassNotFoundException {
+        return loadJxlFromFd(this.nativeDecoderPtr, fileDescriptor.getFd(), (options == null) ? 0 : options.ptr, callback);
     }
 
     public interface Callback {
+        /**
+         * Called when frame information are obtained.
+         *
+         * @param width Width of the image in pixel, without applying orientation.
+         * @param height Width of the image in pixel, without applying orientation.
+         * @param intrinsicWidth Recommended width for displaying the image.
+         * @param intrinsicHeight Recommended height for displaying the image.
+         * @param isAnimated true if the image is composed of multiple visible frames.
+         * @param orientation Same as {@link android.media.ExifInterface} orientation values.
+         * @return true to continue decoding.
+         */
         boolean onHeaderDecoded(int width, int height, int intrinsicWidth, int intrinsicHeight, boolean isAnimated, int orientation);
 
-        boolean onProgressiveFrame(Bitmap btm);
+        /**
+         * Called if progressive data are available.
+         *
+         * @param btm progressive data, owned by the decoder, copy if you continue decoding.
+         * @return true to continue decoding.
+         * @see Options#setDecodeProgressive(boolean)
+         */
+        boolean onProgressiveFrame(@NonNull Bitmap btm);
 
-        boolean onFrameDecoded(int duration, Bitmap btm);
+        /**
+         * Called when frame is available.
+         *
+         * @param duration if animated, duration of the frame in milliseconds.
+         * @param btm progressive data, owned by the decoder, copy if you continue decoding.
+         * @return true to continue decoding.
+         * @see Options#setDecodeFrames(boolean)
+         */
+        boolean onFrameDecoded(int duration, @NonNull Bitmap btm);
     }
 
     /**
@@ -140,7 +179,7 @@ public class JxlDecoder {
          * @param config An ARGB_8888 or RGBA_F16 {@link Bitmap.Config}.
          * @throws ConfigException When the config is not supported.
          */
-        public Options setFormat(Bitmap.Config config) throws ConfigException {
+        public Options setFormat(@NonNull Bitmap.Config config) throws ConfigException {
             int format = 0;
             switch (config) {
                 case ARGB_8888:
@@ -155,20 +194,41 @@ public class JxlDecoder {
             return this;
         }
 
-        // TODO: Document.
+        /**
+         * Should the decoder decode progressive data and call {@link Callback#onProgressiveFrame(Bitmap)}.
+         *
+         * @return true then the decoder will call {@link Callback#onProgressiveFrame(Bitmap)} if progressive data are available.
+         */
         public boolean getDecodeProgressive() {
             return getDecodeProgressive(this.ptr);
         }
 
+        /**
+         * Should the decoder decode progressive data and call {@link Callback#onProgressiveFrame(Bitmap)}.
+         *
+         * @param decodeProgressive if true then the decoder will call {@link Callback#onProgressiveFrame(Bitmap)} if progressive data are available.
+         */
         public Options setDecodeProgressive(boolean decodeProgressive) {
             setDecodeProgressive(this.ptr, decodeProgressive);
             return this;
         }
 
+        /**
+         * Should the decoder decode frames and call {@link Callback#onFrameDecoded(int, Bitmap)}.
+         * This can be used to quickly count number of frames or only decode progressive data.
+         *
+         * @return true then the decoder will call  {@link Callback#onFrameDecoded(int, Bitmap).
+         */
         public boolean getDecodeFrames() {
             return getDecodeFrames(this.ptr);
         }
 
+        /**
+         * Should the decoder decode frames and call {@link Callback#onFrameDecoded(int, Bitmap)}.
+         * This can be used to quickly count number of frames or only decode progressive data.
+         *
+         * @param decodeFrames if true then the decoder will call {@link Callback#onFrameDecoded(int, Bitmap).
+         */
         public Options setDecodeFrames(boolean decodeFrames) {
             setDecodeFrames(this.ptr, decodeFrames);
             return this;

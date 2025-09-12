@@ -37,14 +37,18 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.io.BufferedOutputStream
 
 class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -52,28 +56,31 @@ class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    private val jxlDecoder = JxlDecoder.getInstance()
+    private val jxlDecoder = JxlDecoder()
 
     override suspend fun doWork(): Result {
-        coroutineScope {
+        val result = coroutineScope {
             val fileUri = requireNotNull(inputData.getString(FILE_URI)?.toUri())
             val filename = mediaStoreRepository.getFileName(fileUri) ?: applicationContext.getString(R.string.unknown)
 
             val workFlow = getWorkFlow(fileUri, filename).shareIn(this, SharingStarted.Lazily)
 
             launch {
-                workFlow.takeWhile { it !is WorkState.Success }.collect { p ->
+                workFlow.takeWhile { it !is WorkState.Success && it !is WorkState.Error }.collect { p ->
                     when (p) {
                         WorkState.Loading -> setProgress(workDataOf(PROGRESS to null))
                         is WorkState.Progress -> setProgress(workDataOf(PROGRESS to p.exported.toFloat() / p.total.toFloat()))
                         is WorkState.Success -> setProgress(workDataOf(PROGRESS to 1.0f))
+                        is WorkState.Error -> Unit
                     }
                 }
             }
 
             launch {
                 val notificationId = ID.andDecrement
-                workFlow.takeWhile { it !is WorkState.Success }.collect { progress ->
+                workFlow.takeWhile {
+                    it !is WorkState.Success && it !is WorkState.Error
+                }.collect { progress ->
                     val notification = createNotification(progress, filename)
                     when (progress) {
                         WorkState.Loading -> {
@@ -92,12 +99,32 @@ class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                         is WorkState.Success -> {
                             notificationManager.notify(notificationId, notification)
                         }
+
+                        is WorkState.Error -> notificationManager.notify(notificationId, notification)
                     }
                 }
             }
+
+            workFlow.transformWhile {
+                when (it) {
+                    is WorkState.Success, is WorkState.Error -> {
+                        emit(it)
+                        false
+                    }
+
+                    else -> true
+                }
+            }.first()
         }
-        Log.e("TAG", "END")
-        return Result.success()
+
+        return if (result is WorkState.Error) {
+            if (Log.isLoggable(TAG, Log.ERROR)) {
+                Log.e(TAG, "failed to export", result.error)
+            }
+            Result.failure()
+        } else {
+            Result.success()
+        }
     }
 
     @OptIn(FlowPreview::class)
@@ -150,8 +177,16 @@ class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                         }
 
                         val saveBtm = btm.rotateBitmap(matrix)
-                        val path = requireNotNull(mediaStoreRepository.insertMedia(filename, bucketName))
-                        applicationContext.contentResolver.openOutputStream(path)!!.use { out ->
+                        val path = requireNotNull(mediaStoreRepository.insertMedia(filename, bucketName)) {
+                            "failed to insert media"
+                        }
+
+                        val outputStream =
+                            requireNotNull(applicationContext.contentResolver.openOutputStream(path)?.let { BufferedOutputStream(it) }) {
+                                "failed to open output stream"
+                            }
+
+                        outputStream.use { out ->
                             saveBtm.compress(Bitmap.CompressFormat.PNG, 100, out)
                         }
 
@@ -167,12 +202,14 @@ class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
             close()
         }
-    }.onStart { emit(WorkState.Loading) }.debounce { p -> if (p is WorkState.Progress) 1000L else 0L }
+    }.onStart { emit(WorkState.Loading) }.catch { t -> emit(WorkState.Error(t)) }
+        .debounce { p -> if (p is WorkState.Progress) 1000L else 0L }
 
     sealed interface WorkState {
         data object Loading : WorkState
         data class Progress(val total: Int, val exported: Int) : WorkState
         data class Success(val total: Int) : WorkState
+        data class Error(val error: Throwable) : WorkState
     }
 
     fun getFrameCount(uri: Uri): Int {
@@ -187,8 +224,8 @@ class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 orientation: Int
             ): Boolean = true
 
-            override fun onProgressiveFrame(btm: Bitmap?): Boolean = true
-            override fun onFrameDecoded(duration: Int, btm: Bitmap?): Boolean = true
+            override fun onProgressiveFrame(btm: Bitmap): Boolean = true
+            override fun onFrameDecoded(duration: Int, btm: Bitmap): Boolean = true
         }
 
         return decodeJxl(uri, options, callback)
@@ -260,7 +297,14 @@ class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         when (progress) {
             WorkState.Loading -> notification.setProgress(1, 0, true)
             is WorkState.Progress -> notification.setProgress(progress.total, progress.exported, false)
-            is WorkState.Success -> {}
+            is WorkState.Success -> {
+                notification.setOngoing(false)
+            }
+
+            is WorkState.Error -> {
+                notification.setContentText(applicationContext.getString(R.string.description_export_failure))
+                notification.setOngoing(false)
+            }
         }
 
         return notification.build()
@@ -280,6 +324,7 @@ class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         const val PROGRESS = "PROGRESS"
         const val FILE_URI = "FILE_URI"
         private const val GROUP_KEY = "EXPORT"
+        private const val TAG = "ExportWorker"
 
         private val ID = AtomicInteger(0)
 

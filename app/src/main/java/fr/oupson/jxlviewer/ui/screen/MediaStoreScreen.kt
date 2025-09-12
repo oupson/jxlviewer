@@ -48,7 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import fr.oupson.jxlviewer.R
 import fr.oupson.jxlviewer.repository.MediaStoreRepository
 import fr.oupson.jxlviewer.ui.loading.JxlLoader
@@ -126,12 +126,16 @@ fun MediaStoreScreen(
             ) {
                 when (val state = uiState) {
                     is BucketListViewModel.UiState.EntryList -> {
-                        EntryList(state, onClick = { entry ->
+                        EntryList(state.entries, onClick = { entry ->
                             onEntryClick.invoke(entry)
                         }, showNames = showNames, modifier = Modifier.fillMaxSize())
                     }
 
-                    BucketListViewModel.UiState.Loading -> {}
+                    is BucketListViewModel.UiState.Loading -> {
+                        EntryList(state.entries, onClick = { entry ->
+                            onEntryClick.invoke(entry)
+                        }, showNames = showNames, modifier = Modifier.fillMaxSize())
+                    }
 
                     BucketListViewModel.UiState.Error -> {
                         Text(stringResource(R.string.error_loading_files))
@@ -140,7 +144,9 @@ fun MediaStoreScreen(
                     BucketListViewModel.UiState.MissingPermissions -> {
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
-                            modifier = Modifier.fillMaxSize().padding(16.dp)
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
                         ) {
                             Text(stringResource(R.string.error_missing_permission), textAlign = TextAlign.Justify)
 
@@ -152,10 +158,10 @@ fun MediaStoreScreen(
                                 }
 
                                 (
-                                    {
-                                        launcher.launch(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-                                    }
-                                    )
+                                        {
+                                            launcher.launch(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                                        }
+                                        )
                             } else {
                                 val launcher = rememberLauncherForActivityResult(
                                     contract = ActivityResultContracts.RequestPermission()
@@ -164,10 +170,10 @@ fun MediaStoreScreen(
                                 }
 
                                 (
-                                    {
-                                        launcher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
-                                    }
-                                    )
+                                        {
+                                            launcher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                                        }
+                                        )
                             }
 
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -191,7 +197,7 @@ fun MediaStoreScreen(
 
 @Composable
 private fun EntryList(
-    folderList: BucketListViewModel.UiState.EntryList,
+    entries: List<MediaStoreRepository.Entry>,
     showNames: Boolean,
     onClick: (folder: MediaStoreRepository.Entry) -> Unit,
     modifier: Modifier = Modifier
@@ -206,7 +212,7 @@ private fun EntryList(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start),
             modifier = modifier
         ) {
-            items(folderList.entries) { folder ->
+            items(entries) { folder ->
                 Item(folder.uri, folder.name, showNames, onClick = {
                     onClick(folder)
                 })
@@ -243,7 +249,9 @@ fun Item(uri: Uri, name: String, showName: Boolean, onClick: () -> Unit) {
                         painterResource(R.drawable.broken_image),
                         contentDescription = stringResource(R.string.error_failed_to_load_file),
                         colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.error),
-                        modifier = Modifier.fillMaxSize().clip(MaterialTheme.shapes.large),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(MaterialTheme.shapes.large),
                         contentScale = ContentScale.Crop
                     )
                 }
@@ -257,7 +265,9 @@ fun Item(uri: Uri, name: String, showName: Boolean, onClick: () -> Unit) {
                 is JxlLoader.JxlState.Loaded -> Image(
                     s.painter,
                     contentDescription = stringResource(R.string.description_a_preview_of, name),
-                    modifier = Modifier.fillMaxSize().clip(MaterialTheme.shapes.large),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(MaterialTheme.shapes.large),
                     contentScale = ContentScale.Crop
                 )
 
@@ -265,7 +275,9 @@ fun Item(uri: Uri, name: String, showName: Boolean, onClick: () -> Unit) {
                     Image(
                         s.painter,
                         contentDescription = stringResource(R.string.description_a_preview_of, name),
-                        modifier = Modifier.fillMaxSize().clip(MaterialTheme.shapes.large),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(MaterialTheme.shapes.large),
                         contentScale = ContentScale.Crop
                     )
                 }

@@ -9,12 +9,14 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import fr.oupson.jxlviewer.repository.MediaStoreRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -37,30 +39,38 @@ class BucketListViewModel
 
     private val cookieFlow = MutableStateFlow(0)
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val currentElements: StateFlow<UiState> = cookieFlow.transformLatest {
-        emit(UiState.Loading)
-        try {
-            emit(UiState.EntryList(listEntries()))
-        } catch (e: MediaStoreRepository.MissingPermissionsException) {
-
-            emit(UiState.MissingPermissions)
-        } catch (e: Exception) {
-            if (Log.isLoggable(TAG, Log.ERROR)) {
-                Log.e(TAG, "during folder list with bucketId: $bucketId", e)
+    @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+    val currentElements: StateFlow<UiState> =
+        cookieFlow.transformLatest {
+            emit(UiState.Loading(emptyList()))
+            try {
+                emit(UiState.EntryList(listEntries()))
+            } catch (_: MediaStoreRepository.MissingPermissionsException) {
+                emit(UiState.MissingPermissions)
+            } catch (e: Exception) {
+                if (Log.isLoggable(TAG, Log.ERROR)) {
+                    Log.e(TAG, "during folder list with bucketId: $bucketId", e)
+                }
+                emit(UiState.Error)
             }
-            emit(UiState.Error)
-        }
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        UiState.Loading
-    )
+        }.runningFold<UiState, UiState>(UiState.Loading(emptyList())) { previous, next ->
+            if (previous is UiState.EntryList && next is UiState.Loading) {
+                UiState.Loading(previous.entries)
+            } else {
+                next
+            }
+        }.debounce {
+            if (it is UiState.Loading) {
+                100
+            } else {
+                0
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Loading(emptyList()))
 
     val currentBucketName = cookieFlow.map {
         try {
             queryBucketName()
-        } catch (e: MediaStoreRepository.MissingPermissionsException) {
+        } catch (_: MediaStoreRepository.MissingPermissionsException) {
             null
         } catch (e: Exception) {
             if (Log.isLoggable(TAG, Log.ERROR)) {
@@ -81,8 +91,7 @@ class BucketListViewModel
     }
 
     sealed interface UiState {
-        // TODO: keep old list
-        data object Loading : UiState
+        data class Loading(val entries: List<MediaStoreRepository.Entry>) : UiState
 
         data object MissingPermissions : UiState
 

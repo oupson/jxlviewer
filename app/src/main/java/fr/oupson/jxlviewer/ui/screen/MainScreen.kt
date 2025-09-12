@@ -15,9 +15,9 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSavedStateNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.rememberSceneSetupNavEntryDecorator
-import fr.oupson.jxlviewer.BucketList
-import fr.oupson.jxlviewer.BucketView
-import fr.oupson.jxlviewer.ImageView
+import fr.oupson.jxlviewer.ui.nav.BucketList
+import fr.oupson.jxlviewer.ui.nav.BucketView
+import fr.oupson.jxlviewer.ui.nav.ImageView
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

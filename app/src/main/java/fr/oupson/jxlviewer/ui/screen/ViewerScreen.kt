@@ -1,10 +1,12 @@
 package fr.oupson.jxlviewer.ui.screen
 
+import android.Manifest
 import android.content.Intent
 import android.content.Intent.CATEGORY_DEFAULT
 import android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
 import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.content.Intent.FLAG_ACTIVITY_NO_HISTORY
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration.ORIENTATION_LANDSCAPE
 import android.graphics.Bitmap
 import android.net.Uri
@@ -41,6 +43,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalFloatingToolbar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -58,7 +61,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.core.content.ContextCompat
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import fr.oupson.jxlviewer.BuildConfig
 import fr.oupson.jxlviewer.R
 import fr.oupson.jxlviewer.ui.loading.JxlLoader
@@ -73,72 +77,68 @@ fun ViewerScreen(imageUri: Uri, backEnabled: Boolean, onBackPressed: () -> Unit)
         factory.create(imageUri)
     })
 
+    val wideGamut = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val activity = LocalActivity.current
+        val isWideGamutSupported = remember {
+            if (activity != null) {
+                ContextCompat.getDisplayOrDefault(activity).isWideColorGamut
+            } else {
+                false
+            }
+        }
+
+        DisposableEffect(activity, isWideGamutSupported) {
+            if (activity != null) {
+                activity.window.colorMode = ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT
+
+            }
+            onDispose {
+                if (activity != null) {
+                    activity.window.colorMode = ActivityInfo.COLOR_MODE_DEFAULT
+                }
+            }
+        }
+
+        isWideGamutSupported
+    } else {
+        false
+    }
+
     val exportUiState by viewerViewModel.exportUiStateFlow.collectAsState()
 
     if (exportUiState == ViewerViewModel.WorkerState.NeedNotificationPermission) {
-        val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-            if (it) {
-                viewerViewModel.startExport()
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            NeedPermissionDialog(
+                description = stringResource(R.string.export_notification_permission_description),
+                permission = Manifest.permission.POST_NOTIFICATIONS,
+                onPermissionResult = { viewerViewModel.startExport() },
+                onDismissRequest = {
+                    viewerViewModel.dismissPermission()
+                })
         }
+    }
 
-        val launcherSettings = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            viewerViewModel.startExport()
-        }
-
-        AlertDialog(
-            title = {
-                Text(stringResource(R.string.permission_needed))
-            },
-            text = {
-                Text(stringResource(R.string.export_notification_permission_description))
-            },
+    if (exportUiState == ViewerViewModel.WorkerState.NeedWriteFilePermission) {
+        NeedPermissionDialog(
+            description = stringResource(R.string.export_notification_write_storage_description),
+            permission = Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            onPermissionResult = { viewerViewModel.startExport() },
             onDismissRequest = {
                 viewerViewModel.dismissPermission()
-            },
-
-            confirmButton = {
-                val activity = LocalActivity.current
-                TextButton(onClick = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        val showRational = (activity)?.shouldShowRequestPermissionRationale(
-                            android.Manifest.permission.POST_NOTIFICATIONS
-                        ) ?: false
-
-                        if (showRational) {
-                            val intent = Intent(ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = Uri.fromParts("package", BuildConfig.APPLICATION_ID, null)
-                                addCategory(CATEGORY_DEFAULT)
-                                addFlags(FLAG_ACTIVITY_NEW_TASK)
-                                addFlags(FLAG_ACTIVITY_NO_HISTORY)
-                                addFlags(FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
-                            }
-                            launcherSettings.launch(intent)
-                        } else {
-                            launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                    }
-                }) {
-                    Text(stringResource(R.string.request_permission))
-                }
-            }
-        )
+            })
     }
 
     val name by viewerViewModel.nameFlow.collectAsState()
 
     Box {
         Surface(modifier = Modifier.fillMaxSize()) {
-            val bitmapConfig = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val bitmapConfig = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && wideGamut) {
                 Bitmap.Config.RGBA_F16
             } else {
                 Bitmap.Config.ARGB_8888
             }
             val painter = rememberJxlLoader(
-                imageUri,
-                decodePreview = JxlLoader.DecodePreview.WithFullImage,
-                animated = true,
-                config = bitmapConfig
+                imageUri, decodePreview = JxlLoader.DecodePreview.WithFullImage, animated = true, config = bitmapConfig
             )
             val state by painter.state().collectAsState()
 
@@ -178,35 +178,25 @@ fun ViewerScreen(imageUri: Uri, backEnabled: Boolean, onBackPressed: () -> Unit)
                         .transformable(state = transformableState)
                 ) {
                     Image(
-                        s.painter,
-                        contentDescription = if (name != null) {
+                        s.painter, contentDescription = if (name != null) {
                             stringResource(R.string.description_a_preview_of, requireNotNull(name))
                         } else {
                             stringResource(R.string.description_a_preview_no_name)
-                        },
-                        modifier = Modifier
+                        }, modifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer(
-                                scaleX = scale,
-                                scaleY = scale,
-                                rotationZ = rotation,
-                                translationX = offset.x,
-                                translationY = offset.y
-                            ),
-                        contentScale = ContentScale.Fit
+                                scaleX = scale, scaleY = scale, rotationZ = rotation, translationX = offset.x, translationY = offset.y
+                            ), contentScale = ContentScale.Fit
                     )
                 }
 
                 is JxlLoader.JxlState.Preview -> {
                     Image(
-                        s.painter,
-                        contentDescription = if (name != null) {
+                        s.painter, contentDescription = if (name != null) {
                             stringResource(R.string.description_a_preview_of, requireNotNull(name))
                         } else {
                             stringResource(R.string.description_a_preview_no_name)
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit
+                        }, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit
                     )
                 }
             }
@@ -228,8 +218,7 @@ fun ViewerScreen(imageUri: Uri, backEnabled: Boolean, onBackPressed: () -> Unit)
                             )
                         }
                     }
-                }
-            )
+                })
         }
 
         if (showUiElements) {
@@ -294,19 +283,17 @@ private fun ToolBarContent(viewerViewModel: ViewerViewModel, exportUiState: View
                 viewerViewModel.startExport()
             }) {
                 Icon(
-                    painter = painterResource(R.drawable.check),
-                    contentDescription = stringResource(R.string.description_export_success)
+                    painter = painterResource(R.drawable.check), contentDescription = stringResource(R.string.description_export_success)
                 )
             }
         }
 
-        ViewerViewModel.WorkerState.NeedNotificationPermission, ViewerViewModel.WorkerState.None -> {
+        ViewerViewModel.WorkerState.NeedNotificationPermission, ViewerViewModel.WorkerState.NeedWriteFilePermission, ViewerViewModel.WorkerState.None -> {
             IconButton(onClick = {
                 viewerViewModel.startExport()
             }) {
                 Icon(
-                    painter = painterResource(R.drawable.save_as),
-                    contentDescription = stringResource(R.string.description_save_file)
+                    painter = painterResource(R.drawable.save_as), contentDescription = stringResource(R.string.description_save_file)
                 )
             }
         }
@@ -324,4 +311,43 @@ private fun ToolBarContent(viewerViewModel: ViewerViewModel, exportUiState: View
     }) {
         Icon(painter = painterResource(R.drawable.share), contentDescription = stringResource(R.string.share_file))
     }
+}
+
+@Composable
+fun NeedPermissionDialog(description: String, permission: String, onPermissionResult: () -> Unit, onDismissRequest: () -> Unit) {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        onPermissionResult.invoke()
+    }
+
+    val launcherSettings = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        onPermissionResult.invoke()
+    }
+
+    AlertDialog(title = {
+        Text(stringResource(R.string.permission_needed))
+    }, text = {
+        Text(description)
+    }, onDismissRequest = onDismissRequest, confirmButton = {
+        val activity = LocalActivity.current
+        TextButton(onClick = {
+            val showRational = (activity)?.shouldShowRequestPermissionRationale(
+                permission
+            ) ?: false
+
+            if (showRational) {
+                val intent = Intent(ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", BuildConfig.APPLICATION_ID, null)
+                    addCategory(CATEGORY_DEFAULT)
+                    addFlags(FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(FLAG_ACTIVITY_NO_HISTORY)
+                    addFlags(FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                }
+                launcherSettings.launch(intent)
+            } else {
+                launcher.launch(permission)
+            }
+        }) {
+            Text(stringResource(R.string.request_permission))
+        }
+    })
 }

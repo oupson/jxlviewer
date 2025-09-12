@@ -7,6 +7,9 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
     <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
@@ -23,11 +26,9 @@
         android:theme="@style/Theme.JxlViewer"
         tools:targetApi="33">
         <activity
-            android:name=".ViewerActivity"
+            android:name=".activity.MainActivity"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize"
-
-            android:colorMode="wideColorGamut">
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <!-- Intent filter to open the app from the launcher -->
                 <action android:name="android.intent.action.MAIN" />

@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.RememberObserver
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.asImageBitmap
@@ -234,6 +235,8 @@ class JxlLoader internal constructor(
     }
 }
 
+val LocalDecoder= compositionLocalOf { JxlDecoder() }
+
 @Composable
 fun rememberJxlLoader(
     uri: Uri,
@@ -242,9 +245,10 @@ fun rememberJxlLoader(
     animated: Boolean = true
 ): JxlLoader {
     val context = LocalContext.current
+    val decoder = LocalDecoder.current
     return remember(uri, config, decodePreview, animated) {
         JxlLoader(
-            JxlDecoder.getInstance(),
+            decoder,
             context.assets,
             context.contentResolver,
             uri,

@@ -1,4 +1,4 @@
-package fr.oupson.jxlviewer
+package fr.oupson.jxlviewer.activity
 
 import android.content.Intent
 import android.graphics.Color
@@ -7,24 +7,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.navigation3.runtime.NavKey
 import dagger.hilt.android.AndroidEntryPoint
+import fr.oupson.jxlviewer.ui.nav.BucketList
+import fr.oupson.jxlviewer.ui.nav.ImageView
 import fr.oupson.jxlviewer.ui.screen.MainScreen
 import fr.oupson.jxlviewer.ui.theme.AppTheme
-import kotlinx.serialization.Serializable
 
-@Serializable
-data object BucketList : NavKey
 
-@Serializable
-data class BucketView(val id: Long) : NavKey
-
-@Serializable
-data class ImageView(val uri: String) : NavKey
-
-// TODO: rename
 @AndroidEntryPoint
-class ViewerActivity : ComponentActivity() {
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(

@@ -10,11 +10,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import android.provider.OpenableColumns
+import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import fr.oupson.jxlviewer.R
 import fr.oupson.jxlviewer.repository.MediaStoreRepository
 import javax.inject.Inject
-import kotlin.io.path.Path
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -22,14 +24,11 @@ class MediaStoreRepositoryImpl @Inject constructor(private val application: Appl
     private val contentResolver: ContentResolver = application.contentResolver
 
     private val projection = arrayOf(
-        MediaStore.Images.Media._ID,
-        MediaStore.Images.Media.DISPLAY_NAME
+        MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME
     )
 
     private val folderProjection = arrayOf(
-        MediaStore.Images.Media._ID,
-        MediaStore.Images.Media.BUCKET_ID,
-        MediaStore.Images.Media.BUCKET_DISPLAY_NAME
+        MediaStore.MediaColumns._ID, MediaStore.MediaColumns.BUCKET_ID, MediaStore.MediaColumns.BUCKET_DISPLAY_NAME
     )
 
     private val selectionNoBucket = "${MediaStore.MediaColumns.DATA} LIKE ? OR ${MediaStore.MediaColumns.MIME_TYPE} = ?"
@@ -51,17 +50,16 @@ class MediaStoreRepositoryImpl @Inject constructor(private val application: Appl
         if (isPermissionMissing()) {
             throw MediaStoreRepository.MissingPermissionsException()
         }
+
+        val unknownName = application.getString(R.string.unknown)
+
         val selectionArgs = arrayOf("%.jxl", "image/jxl")
         contentResolver.query(
-            collection,
-            folderProjection,
-            selectionNoBucket,
-            selectionArgs,
-            sortOrder
+            collection, folderProjection, selectionNoBucket, selectionArgs, sortOrder
         )?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-            val bucketIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_ID)
-            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val bucketIdColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_ID)
+            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
             val buckets = mutableSetOf<Long>()
 
             buildList {
@@ -75,10 +73,9 @@ class MediaStoreRepositoryImpl @Inject constructor(private val application: Appl
                     buckets.add(bucketId)
 
                     val id = cursor.getLong(idColumn)
-                    val name = cursor.getString(nameColumn) ?: "no name" // TODO
+                    val name = cursor.getString(nameColumn) ?: unknownName
                     val contentUri: Uri = ContentUris.withAppendedId(
-                        collection,
-                        id
+                        collection, id
                     )
 
                     add(MediaStoreRepository.Entry(bucketId, contentUri, name))
@@ -92,19 +89,19 @@ class MediaStoreRepositoryImpl @Inject constructor(private val application: Appl
             throw MediaStoreRepository.MissingPermissionsException()
         }
 
+        val unknownName = application.getString(R.string.unknown)
         val selectionArgs = arrayOf(bucketId.toString(), "%.jxl", "image/jxl")
         val sortOrder = ""
         contentResolver.query(collection, projection, selectionBucket, selectionArgs, sortOrder)?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
             buildList {
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idColumn)
-                    val name = cursor.getString(nameColumn)
+                    val name = cursor.getString(nameColumn) ?: unknownName
 
                     val contentUri: Uri = ContentUris.withAppendedId(
-                        collection,
-                        id
+                        collection, id
                     )
                     add(MediaStoreRepository.Entry(id, contentUri, name))
                 }
@@ -119,11 +116,7 @@ class MediaStoreRepositoryImpl @Inject constructor(private val application: Appl
         val selectionArgs = arrayOf(bucketId.toString())
         val uri = collection.buildUpon().appendQueryParameter("limit", "1").build()
         val cursor = contentResolver.query(
-            uri,
-            folderProjection,
-            selectionFilename,
-            selectionArgs,
-            sortOrder
+            uri, folderProjection, selectionFilename, selectionArgs, sortOrder
         )?.use { cursor ->
             if (cursor.moveToNext()) {
                 cursor.getString(2)
@@ -145,10 +138,15 @@ class MediaStoreRepositoryImpl @Inject constructor(private val application: Appl
                     throw MediaStoreRepository.MissingPermissionsException()
                 }
 
-                contentResolver.query(fileUri, null, null, null, null)?.use { cursor ->
-                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (cursor.moveToFirst() && index >= 0) {
-                        cursor.getString(index)
+                contentResolver.query(
+                    fileUri, arrayOf(
+                        MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.TITLE
+                    ), null, null, null
+                )?.use { cursor ->
+                    val indexDisplayName = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                    val indexTitle = cursor.getColumnIndex(MediaStore.MediaColumns.TITLE)
+                    if (cursor.moveToFirst()) {
+                        cursor.getString(indexDisplayName) ?: cursor.getString(indexTitle)
                     } else {
                         null
                     }
@@ -158,23 +156,46 @@ class MediaStoreRepositoryImpl @Inject constructor(private val application: Appl
     }
 
     override suspend fun insertMedia(mediaName: String, bucketName: String?): Uri? {
-        val imageCollection =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                MediaStore.Images.Media.getContentUri(
-                    MediaStore.VOLUME_EXTERNAL_PRIMARY
-                )
-            } else {
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            insertMediaAndroid10(mediaName, bucketName)
+        } else {
+            insertMediaLegacy(mediaName, bucketName)
+        }
+    }
 
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private suspend fun insertMediaAndroid10(mediaName: String, bucketName: String?): Uri? {
+        val imageCollection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         val newImageDetails = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, mediaName)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
             if (bucketName != null) {
-                put(MediaStore.Images.Media.RELATIVE_PATH, Path(Environment.DIRECTORY_PICTURES, bucketName).toString())
+                put(MediaStore.Images.Media.RELATIVE_PATH, joinPath(Environment.DIRECTORY_PICTURES, bucketName))
             }
         }
 
-        return contentResolver
-            .insert(imageCollection, newImageDetails)
+        return withContext(Dispatchers.IO) {
+            contentResolver.insert(imageCollection, newImageDetails)
+        }
+    }
+
+    private suspend fun insertMediaLegacy(mediaName: String, bucketName: String?): Uri? {
+        var dirPath = Environment.getExternalStorageDirectory().resolve(Environment.DIRECTORY_PICTURES)
+        if (bucketName != null) {
+            dirPath = dirPath.resolve(bucketName)
+        }
+        withContext(Dispatchers.IO) {
+            dirPath.mkdirs()
+        }
+        return dirPath.resolve(mediaName).toUri()
+    }
+
+    private fun joinPath(parent: String, child: String): String = buildString {
+        append(parent)
+        if (!parent.endsWith("/")) {
+            append('/')
+        }
+        append(child)
     }
 }

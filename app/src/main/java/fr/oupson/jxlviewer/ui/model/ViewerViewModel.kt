@@ -41,30 +41,37 @@ class ViewerViewModel @AssistedInject constructor(
         true
     }
 
-    private val notificationPermissionGrantedFlow = MutableStateFlow(false)
+    private fun checkWriteFilePermission() = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+        application.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+    } else {
+        true
+    }
 
-    fun exportUiStateFlow() = workFlow.combine(notificationPermissionGrantedFlow) { work, needPermissions ->
-        if (needPermissions) {
-            WorkerState.NeedNotificationPermission
-        } else {
-            Log.e(TAG, "${work?.progress} ${work?.progress?.hasKeyWithValueOfType(ExportWorker.PROGRESS, Double::class.java)}")
-            when (work?.state) {
-                WorkInfo.State.ENQUEUED -> WorkerState.Exporting(null)
-                WorkInfo.State.RUNNING -> {
-                    val progress = work.progress.getFloat(ExportWorker.PROGRESS, Float.NaN)
-                    if (progress.isNaN()) {
-                        WorkerState.Exporting(null)
-                    } else {
-                        WorkerState.Exporting(progress)
+    private val needNotificationPermissionFlow = MutableStateFlow(false)
+    private val needWriteFilePermissionFlow = MutableStateFlow(false)
+
+    fun exportUiStateFlow() =
+        combine(workFlow, needNotificationPermissionFlow, needWriteFilePermissionFlow) { work, needNotification, needFile ->
+            when {
+                needNotification -> WorkerState.NeedNotificationPermission
+                needFile -> WorkerState.NeedWriteFilePermission
+                else -> when (work?.state) {
+                    WorkInfo.State.ENQUEUED -> WorkerState.Exporting(null)
+                    WorkInfo.State.RUNNING -> {
+                        val progress = work.progress.getFloat(ExportWorker.PROGRESS, Float.NaN)
+                        if (progress.isNaN()) {
+                            WorkerState.Exporting(null)
+                        } else {
+                            WorkerState.Exporting(progress)
+                        }
                     }
-                }
 
-                WorkInfo.State.SUCCEEDED -> WorkerState.Success
-                WorkInfo.State.FAILED, WorkInfo.State.BLOCKED, WorkInfo.State.CANCELLED -> WorkerState.Failed
-                null -> WorkerState.None
+                    WorkInfo.State.SUCCEEDED -> WorkerState.Success
+                    WorkInfo.State.FAILED, WorkInfo.State.BLOCKED, WorkInfo.State.CANCELLED -> WorkerState.Failed
+                    null -> WorkerState.None
+                }
             }
         }
-    }
 
     val exportUiStateFlow = exportUiStateFlow().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), WorkerState.None)
 
@@ -79,18 +86,31 @@ class ViewerViewModel @AssistedInject constructor(
 
     fun startExport() {
         viewModelScope.launch {
+            var startExport = true
             if (checkNotificationPermission()) {
-                notificationPermissionGrantedFlow.emit(false)
-                ExportWorker.scheduleWork(application, imageUri)
+                needNotificationPermissionFlow.emit(false)
             } else {
-                notificationPermissionGrantedFlow.emit(true)
+                startExport = false
+                needNotificationPermissionFlow.emit(true)
+            }
+
+            if (checkWriteFilePermission()) {
+                needWriteFilePermissionFlow.emit(false)
+            } else {
+                startExport = false
+                needWriteFilePermissionFlow.emit(true)
+            }
+
+            if (startExport) {
+                ExportWorker.scheduleWork(application, imageUri)
             }
         }
     }
 
     fun dismissPermission() {
         viewModelScope.launch {
-            notificationPermissionGrantedFlow.emit(false)
+            needNotificationPermissionFlow.emit(false)
+            needWriteFilePermissionFlow.emit(false)
         }
     }
 
@@ -102,6 +122,7 @@ class ViewerViewModel @AssistedInject constructor(
 
     sealed interface WorkerState {
         data object NeedNotificationPermission : WorkerState
+        data object NeedWriteFilePermission : WorkerState
         data class Exporting(val progress: Float?) : WorkerState
         data object Success : WorkerState
         data object Failed : WorkerState

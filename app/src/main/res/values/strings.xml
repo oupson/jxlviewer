@@ -28,6 +28,7 @@
     <string name="export_notification_channel_title">Export files notifications</string>
     <string name="export_notification_channel_description">Notifications showing progress of file exporting.</string>
     <string name="export_notification_permission_description">To export a file, please grant the notification permission, so the export can run in the background and display progress.</string>
+    <string name="export_notification_write_storage_description">To export a file, please grant the write external storage permission.</string>
 
 
     <string name="export_notification_title">Exporting file…</string>
