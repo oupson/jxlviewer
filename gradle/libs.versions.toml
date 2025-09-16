@@ -1,7 +1,7 @@
 [versions]
 android-minSdk = "23"
 android-compileSdk = "36"
-release-version = "0.5.0-alpha2"
+release-version = "0.5.0"
 release-versionCode = "6"
 
 agp = "8.13.0"
