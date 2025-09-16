@@ -10,15 +10,14 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import fr.oupson.jxlviewer.R
 import fr.oupson.jxlviewer.repository.MediaStoreRepository
-import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
 class MediaStoreRepositoryImpl @Inject constructor(private val application: Application) : MediaStoreRepository {
     private val contentResolver: ContentResolver = application.contentResolver
@@ -134,10 +133,6 @@ class MediaStoreRepositoryImpl @Inject constructor(private val application: Appl
             }
 
             else -> {
-                if (isPermissionMissing()) {
-                    throw MediaStoreRepository.MissingPermissionsException()
-                }
-
                 contentResolver.query(
                     fileUri, arrayOf(
                         MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.TITLE
@@ -162,7 +157,6 @@ class MediaStoreRepositoryImpl @Inject constructor(private val application: Appl
             insertMediaLegacy(mediaName, bucketName)
         }
     }
-
 
     @RequiresApi(Build.VERSION_CODES.Q)
     private suspend fun insertMediaAndroid10(mediaName: String, bucketName: String?): Uri? {
