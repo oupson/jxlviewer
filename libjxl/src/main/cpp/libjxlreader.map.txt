@@ -1,0 +1,6 @@
+LIBJXLREADER {
+  global:
+    JNI_OnLoad;
+  local:
+    *;
+};

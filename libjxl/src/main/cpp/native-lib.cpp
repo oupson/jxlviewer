@@ -6,60 +6,42 @@
 #include "Decoder.h"
 #include "Options.h"
 
-extern "C" JNIEXPORT jobject JNICALL
-Java_fr_oupson_libjxl_JxlDecoder_loadJxlFromInputStream(JNIEnv *env, jclass /* clazz */,
-                                                        jlong native_decoder_ptr,
-                                                        jobject input_stream, jlong options_ptr) {
-    auto *decoder = reinterpret_cast<Decoder *>(native_decoder_ptr);
-    auto *options = reinterpret_cast<Options *>(options_ptr);
-    auto jniInputStream = JniInputStream(env, input_stream);
 
-    return decoder->DecodeJxl(env, jniInputStream, options);
-}
-
-extern "C" JNIEXPORT jobject JNICALL
-Java_fr_oupson_libjxl_JxlDecoder_loadJxlFromFd(JNIEnv *env, jclass /* clazz */,
-                                               jlong native_decoder_ptr, jint fd,
-                                               jlong options_ptr) {
-    auto *decoder = reinterpret_cast<Decoder *>(native_decoder_ptr);
-    auto *options = reinterpret_cast<Options *>(options_ptr);
-    auto jniInputStream = FileDescriptorInputSource(env, fd);
-
-    return decoder->DecodeJxl(env, jniInputStream, options);
-}
-
-extern "C" JNIEXPORT jlong JNICALL
-Java_fr_oupson_libjxl_JxlDecoder_getNativeDecoderPtr(JNIEnv *env, jclass /* clazz */) {
+jlong JNICALL
+decoderAlloc(JNIEnv *env, jclass /* clazz */) {
     auto *ptr = new Decoder(env);
     return reinterpret_cast<jlong >(ptr);
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_fr_oupson_libjxl_JxlDecoder_freeNativeDecoderPtr(JNIEnv * /* env */, jclass /* clazz */,
-                                                      jlong native_decoder_ptr) {
+
+void JNICALL
+decoderFree(JNIEnv * /* env */, jclass /* clazz */, jlong native_decoder_ptr) {
     auto *decoder = reinterpret_cast<Decoder *>(native_decoder_ptr);
     delete decoder;
 }
 
-extern "C" JNIEXPORT jobject JNICALL
-Java_fr_oupson_libjxl_JxlDecoder_loadThumbnailFromFd(JNIEnv *env, jclass /* clazz */,
-                                                     jlong native_decoder_ptr, jint fd) {
+
+jint JNICALL
+decoderFromInputStream(JNIEnv *env, jclass /* clazz */, jlong native_decoder_ptr,
+                       jobject input_stream, jlong options_ptr, jobject callback) {
     auto *decoder = reinterpret_cast<Decoder *>(native_decoder_ptr);
-    auto jniInputStream = FileDescriptorInputSource(env, fd);
-
-    return decoder->DecodeJxlThumbnail(env, jniInputStream);
-
-}
-
-extern "C" JNIEXPORT jobject JNICALL
-Java_fr_oupson_libjxl_JxlDecoder_loadThumbnailFromInputStream(JNIEnv *env, jclass /* clazz */,
-                                                              jlong native_decoder_ptr,
-                                                              jobject input_stream) {
-    auto *decoder = reinterpret_cast<Decoder *>(native_decoder_ptr);
+    auto *options = reinterpret_cast<Options *>(options_ptr);
     auto jniInputStream = JniInputStream(env, input_stream);
 
-    return decoder->DecodeJxlThumbnail(env, jniInputStream);
+    return decoder->DecodeJxl(env, jniInputStream, options, callback);
 }
+
+// TODO: test mmap
+jint JNICALL
+decoderFromFd(JNIEnv *env, jclass /* clazz */, jlong native_decoder_ptr, jint fd, jlong options_ptr,
+              jobject callback) {
+    auto *decoder = reinterpret_cast<Decoder *>(native_decoder_ptr);
+    auto *options = reinterpret_cast<Options *>(options_ptr);
+    auto jniInputStream = FileDescriptorInputSource(env, fd);
+
+    return decoder->DecodeJxl(env, jniInputStream, options, callback);
+}
+
 
 jlong JNICALL
 decoderOptionsAlloc(JNIEnv * /* env */, jclass /* clazz */) {
@@ -87,17 +69,48 @@ decoderOptionsSetBitmapConfig(JNIEnv * /* env */, jclass /* clazz */, jlong ptr,
 
 
 jboolean JNICALL
-decoderOptionsGetDecodeMultipleFrames(JNIEnv * /* env */, jclass /* clazz */, jlong ptr) {
+decoderOptionsGetDecodeProgressive(JNIEnv * /* env */, jclass /* clazz */, jlong ptr) {
     auto options = reinterpret_cast<Options *>(ptr);
-    return (options->decodeMultipleFrames) ? JNI_TRUE : JNI_FALSE;
+    return (options->decodeProgressive) ? JNI_TRUE : JNI_FALSE;
 }
 
 
 void JNICALL
-decoderOptionsSetDecodeMultipleFrames(JNIEnv * /* env */, jclass /* clazz */, jlong ptr,
-                                      jboolean decodeMultipleFrames) {
+decoderOptionsSetDecodeProgressive(JNIEnv * /* env */, jclass /* clazz */, jlong ptr,
+                                   jboolean decode_progressive) {
     auto options = reinterpret_cast<Options *>(ptr);
-    options->decodeMultipleFrames = decodeMultipleFrames == JNI_TRUE;
+    options->decodeProgressive = decode_progressive == JNI_TRUE;
+}
+
+jboolean JNICALL
+decoderOptionsGetDecodeFrames(JNIEnv * /* env */, jclass /* clazz */, jlong ptr) {
+    auto options = reinterpret_cast<Options *>(ptr);
+    return (options->decodeFrames) ? JNI_TRUE : JNI_FALSE;
+}
+
+
+void JNICALL
+decoderOptionsSetDecodeFrames(JNIEnv * /* env */, jclass /* clazz */, jlong ptr,
+                              jboolean decode_frames) {
+    auto options = reinterpret_cast<Options *>(ptr);
+    options->decodeFrames = decode_frames == JNI_TRUE;
+}
+
+
+jint registerDecoder(JNIEnv *env) noexcept {
+    jclass classOptions = env->FindClass("fr/oupson/libjxl/JxlDecoder");
+    if (classOptions == nullptr) {
+        return JNI_ERR;
+    }
+
+    static const JNINativeMethod methods[] = {{"getNativeDecoderPtr",    "()J",                                                              reinterpret_cast<void *>(decoderAlloc)},
+                                              {"freeNativeDecoderPtr",   "(J)V",                                                             reinterpret_cast<void *>(decoderFree)},
+                                              {"loadJxlFromInputStream", "(JLjava/io/InputStream;JLfr/oupson/libjxl/JxlDecoder$Callback;)I", reinterpret_cast<void *>(decoderFromInputStream)},
+                                              {"loadJxlFromFd",          "(JIJLfr/oupson/libjxl/JxlDecoder$Callback;)I",                     reinterpret_cast<void *>(decoderFromFd)},
+
+    };
+
+    return env->RegisterNatives(classOptions, methods, sizeof(methods) / sizeof(JNINativeMethod));
 }
 
 
@@ -107,14 +120,14 @@ jint registerDecoderOptions(JNIEnv *env) noexcept {
         return JNI_ERR;
     }
 
-    static const JNINativeMethod methods[] = {
-            {"alloc",                   "()J",   reinterpret_cast<void *>(decoderOptionsAlloc)},
-            {"free",                    "(J)V",  reinterpret_cast<void *>(decoderOptionsFree)},
-            {"setBitmapConfig",         "(JI)V", reinterpret_cast<void *>(decoderOptionsSetBitmapConfig)},
-            {"getBitmapConfig",         "(J)I",  reinterpret_cast<void *>(decoderOptionsGetBitmapConfig)},
-            {"getDecodeMultipleFrames", "(J)Z",  reinterpret_cast<void *>(decoderOptionsGetDecodeMultipleFrames)},
-            {"setDecodeMultipleFrames", "(JZ)V", reinterpret_cast<void *>(decoderOptionsSetDecodeMultipleFrames)},
-    };
+    static const JNINativeMethod methods[] = {{"alloc",                "()J",   reinterpret_cast<void *>(decoderOptionsAlloc)},
+                                              {"free",                 "(J)V",  reinterpret_cast<void *>(decoderOptionsFree)},
+                                              {"setBitmapConfig",      "(JI)V", reinterpret_cast<void *>(decoderOptionsSetBitmapConfig)},
+                                              {"getBitmapConfig",      "(J)I",  reinterpret_cast<void *>(decoderOptionsGetBitmapConfig)},
+                                              {"getDecodeProgressive", "(J)Z",  reinterpret_cast<void *>(decoderOptionsGetDecodeProgressive)},
+                                              {"setDecodeProgressive", "(JZ)V", reinterpret_cast<void *>(decoderOptionsSetDecodeProgressive)},
+                                              {"getDecodeFrames",      "(J)Z",  reinterpret_cast<void *>(decoderOptionsGetDecodeFrames)},
+                                              {"setDecodeFrames",      "(JZ)V", reinterpret_cast<void *>(decoderOptionsSetDecodeFrames)},};
 
     return env->RegisterNatives(classOptions, methods, sizeof(methods) / sizeof(JNINativeMethod));
 }
@@ -122,6 +135,10 @@ jint registerDecoderOptions(JNIEnv *env) noexcept {
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void * /* reserved */) {
     JNIEnv *env;
     if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK) {
+        return JNI_ERR;
+    }
+
+    if (registerDecoder(env) != JNI_OK) {
         return JNI_ERR;
     }
 

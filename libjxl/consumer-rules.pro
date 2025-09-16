@@ -4,3 +4,7 @@
 -keep class fr.oupson.libjxl.** {
     static native <methods>;
 }
+
+-keep class fr.oupson.libjxl.JxlDecoder$Callback {
+    <methods>;
+}

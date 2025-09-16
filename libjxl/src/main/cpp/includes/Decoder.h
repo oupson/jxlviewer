@@ -12,25 +12,21 @@ public:
 
     ~Decoder();
 
-    jobject DecodeJxl(JNIEnv *env, InputSource &source, Options* options);
-
-    jobject DecodeJxlThumbnail(JNIEnv *env, InputSource &source);
+    int DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobject callback);
 
 private:
     JavaVM *vm;
-
-    jclass drawableClass;
-    jmethodID drawableMethodID;
-    jmethodID addDrawableMethodID;
-
-    jclass bitmapDrawableClass;
-    jmethodID bitmapDrawableMethodID;
 
     jclass bitmapClass;
     jmethodID createBitmapMethodId;
 
     jobject bitmapConfigRgbaU8;
     jobject bitmapConfigRgbaF16;
+
+    jclass callbackClass;
+    jmethodID callbackOnHeaderDecoded;
+    jmethodID callbackOnProgressiveFrame;
+    jmethodID callbackOnFrameDecoded;
 };
 
 #endif //JXLVIEWER_DECODER_H

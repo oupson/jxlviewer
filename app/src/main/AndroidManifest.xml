@@ -3,6 +3,17 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".JxlApplication"
@@ -15,9 +26,9 @@
         android:theme="@style/Theme.JxlViewer"
         tools:targetApi="33">
         <activity
-            android:name=".ViewerActivity"
+            android:name=".activity.MainActivity"
             android:exported="true"
-            android:colorMode="wideColorGamut">
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <!-- Intent filter to open the app from the launcher -->
                 <action android:name="android.intent.action.MAIN" />
@@ -83,6 +94,11 @@
                 <data android:mimeType="application/octet-stream" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="mediaProcessing"
+            tools:node="merge" />
     </application>
 
 </manifest>

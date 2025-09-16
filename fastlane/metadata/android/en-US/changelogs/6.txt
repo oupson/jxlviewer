@@ -1,0 +1,3 @@
+Added:
+- Gallery.
+- Export to PNG.

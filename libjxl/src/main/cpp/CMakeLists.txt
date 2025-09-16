@@ -1,4 +1,6 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22.1)
+
+set(CMAKE_ANDROID_NDK_VERSION 23)
 
 project("jxlreader")
 
@@ -33,4 +35,15 @@ target_link_libraries(
 link_skcms(jxlreader)
 
 add_link_options("WL,--build-id=none")
-target_link_options(jxlreader PUBLIC "-Wl,--build-id=none")
+target_link_options(
+        jxlreader
+        PUBLIC
+        "-Wl,--build-id=none"
+        "-Wl,--version-script,${CMAKE_SOURCE_DIR}/libjxlreader.map.txt"
+        "-Wl,--no-undefined-version"
+)
+
+set_target_properties(jxlreader
+        PROPERTIES
+        LINK_DEPENDS ${CMAKE_SOURCE_DIR}/libjxlreader.map.txt
+)
