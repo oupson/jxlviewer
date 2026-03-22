@@ -1,65 +1,66 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
+    alias(libs.plugins.ksp)
     alias(libs.plugins.android.application)
 
     alias(libs.plugins.compose.compiler)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.ksp)
+
 
     alias(libs.plugins.hilt.android)
 }
+kotlin {
+    android {
+        namespace = "fr.oupson.jxlviewer"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
 
-android {
-    namespace = "fr.oupson.jxlviewer"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+        defaultConfig {
+            applicationId = "fr.oupson.jxlviewer"
+            minSdk = libs.versions.android.minSdk.get().toInt()
+            targetSdk = libs.versions.android.compileSdk.get().toInt()
+            versionCode = libs.versions.release.versionCode.get().toInt()
+            versionName = libs.versions.release.version.get()
 
-    defaultConfig {
-        applicationId = "fr.oupson.jxlviewer"
-        minSdk = libs.versions.android.minSdk.get().toInt()
-        targetSdk = libs.versions.android.compileSdk.get().toInt()
-        versionCode = libs.versions.release.versionCode.get().toInt()
-        versionName = libs.versions.release.version.get()
+            testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        splits {
-            abi {
-                isEnable = true
-                reset()
-                include("x86", "x86_64", "armeabi-v7a", "arm64-v8a")
-                isUniversalApk = true
+            splits {
+                abi {
+                    isEnable = true
+                    reset()
+                    include("x86", "x86_64", "armeabi-v7a", "arm64-v8a")
+                    isUniversalApk = true
+                }
             }
         }
-    }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-            signingConfig = signingConfigs.getByName("debug")
+        buildTypes {
+            release {
+                isMinifyEnabled = true
+                isShrinkResources = true
+                proguardFiles(
+                    getDefaultProguardFile("proguard-android-optimize.txt"),
+                    "proguard-rules.pro"
+                )
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
-    }
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-
-    kotlin {
-        compilerOptions {
-            jvmTarget = JvmTarget.JVM_11
+        compileOptions {
+            sourceCompatibility = JavaVersion.VERSION_11
+            targetCompatibility = JavaVersion.VERSION_11
         }
-    }
 
-    buildFeatures {
-        compose = true
-        buildConfig = true
+        kotlin {
+            compilerOptions {
+                jvmTarget = JvmTarget.JVM_11
+            }
+        }
+
+        buildFeatures {
+            compose = true
+            buildConfig = true
+        }
     }
 }
 
