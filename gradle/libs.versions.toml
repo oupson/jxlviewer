@@ -1,8 +1,8 @@
 [versions]
 android-minSdk = "23"
 android-compileSdk = "36"
-release-version = "0.5.1"
-release-versionCode = "7"
+release-version = "0.5.2"
+release-versionCode = "8"
 
 agp = "9.1.0"
 
