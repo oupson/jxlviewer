@@ -3,7 +3,6 @@ package fr.oupson.jxlviewer.ui.loading
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
 import androidx.compose.runtime.RememberObserver
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf

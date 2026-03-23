@@ -10,8 +10,8 @@ import androidx.compose.runtime.RememberObserver
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import fr.oupson.jxlviewer.util.getMatrixForExifOrientation
@@ -54,21 +54,14 @@ class JxlLoader internal constructor(
             val options = JxlDecoder.Options().setFormat(config).setDecodeProgressive(decodePreview != DecodePreview.Disabled)
             val callback = object : JxlDecoder.Callback {
                 override fun onHeaderDecoded(
-                    width: Int,
-                    height: Int,
-                    intrinsicWidth: Int,
-                    intrinsicHeight: Int,
-                    isAnimated: Boolean,
-                    orientation: Int
+                    width: Int, height: Int, intrinsicWidth: Int, intrinsicHeight: Int, isAnimated: Boolean, orientation: Int
                 ): Boolean {
                     intrinsicSize = Size(width.toFloat(), height.toFloat())
                     haveAnimation = isAnimated && this@JxlLoader.animated
 
                     if (this@JxlLoader.decodePreview != DecodePreview.WithoutFullImage) {
                         transformMatrix = getMatrixForExifOrientation(
-                            orientation,
-                            width,
-                            height
+                            orientation, width, height
                         )
                     }
                     return true
@@ -84,8 +77,8 @@ class JxlLoader internal constructor(
                         }
                         _state.tryEmit(
                             JxlState.Preview(
-                                BitmapPainter(
-                                    displayBitmap.asImageBitmap()
+                                ResizePainter(
+                                    displayBitmap
                                 )
                             )
                         )
@@ -99,20 +92,20 @@ class JxlLoader internal constructor(
                     if (isActive) {
                         val displayBitmap = if (this@JxlLoader.decodePreview == DecodePreview.WithoutFullImage) {
                             btm.prepareToDraw()
-                            btm.asImageBitmap()
+                            btm
                         } else {
-                            btm.copyBitmap(transformMatrix).asImageBitmap()
+                            btm.copyBitmap(transformMatrix)
                         }
                         return if (haveAnimation) {
                             if (jxlPainter == null) {
-                                jxlPainter = JxlPainter(intrinsicSize!!, JxlPainter.Frame(duration, displayBitmap))
+                                jxlPainter = JxlPainter(intrinsicSize!!, JxlPainter.Frame(duration, displayBitmap.asImageBitmap()))
                                 _state.tryEmit(JxlState.Loaded(jxlPainter))
                             } else {
-                                jxlPainter.appendFrame(JxlPainter.Frame(duration, displayBitmap))
+                                jxlPainter.appendFrame(JxlPainter.Frame(duration, displayBitmap.asImageBitmap()))
                             }
                             true
                         } else {
-                            _state.tryEmit(JxlState.Loaded(BitmapPainter(displayBitmap)))
+                            _state.tryEmit(JxlState.Loaded(ResizePainter(displayBitmap)))
                             false
                         }
                     } else {
@@ -126,9 +119,7 @@ class JxlLoader internal constructor(
                 "http", "https" -> {
                     URL(uri.toString()).openConnection().inputStream.use {
                         jxlDecoder.decodeImage(
-                            it,
-                            options,
-                            callback
+                            it, options, callback
                         )
                     }
                 }
@@ -136,9 +127,7 @@ class JxlLoader internal constructor(
                 "asset" -> {
                     assetManager.open(requireNotNull(uri.path).removePrefix("/"), AssetManager.ACCESS_STREAMING).use { inputStream ->
                         jxlDecoder.decodeImage(
-                            inputStream,
-                            options,
-                            callback
+                            inputStream, options, callback
                         )
                     }
                 }
@@ -147,17 +136,13 @@ class JxlLoader internal constructor(
                     try {
                         contentResolver.openFileDescriptor(uri, "r")?.use { fd ->
                             jxlDecoder.decodeImage(
-                                fd,
-                                options,
-                                callback
+                                fd, options, callback
                             )
                         }
                     } catch (_: FileNotFoundException) {
                         contentResolver.openInputStream(uri)?.use { inputStream ->
                             jxlDecoder.decodeImage(
-                                inputStream,
-                                options,
-                                callback
+                                inputStream, options, callback
                             )
                         }
                     }
@@ -176,12 +161,11 @@ class JxlLoader internal constructor(
      * Using HARDWARE may be a good idea, but we can't cause the bitmap only exist in the callback, and uploading is asynchronous.
      */
     private fun Bitmap.copyBitmap(transformMatrix: Matrix): Bitmap {
-        val btm =
-            if (transformMatrix.isIdentity) {
-                this.copy(requireNotNull(this.config), true)
-            } else {
-                Bitmap.createBitmap(this, 0, 0, this.width, this.height, transformMatrix, true)
-            }
+        val btm = if (transformMatrix.isIdentity) {
+            this.copy(requireNotNull(this.config), true)
+        } else {
+            Bitmap.createBitmap(this, 0, 0, this.width, this.height, transformMatrix, true)
+        }
         btm.prepareToDraw()
         return requireNotNull(btm)
     }
@@ -225,9 +209,7 @@ class JxlLoader internal constructor(
     }
 
     enum class DecodePreview {
-        WithFullImage,
-        WithoutFullImage,
-        Disabled
+        WithFullImage, WithoutFullImage, Disabled
     }
 
     companion object {
@@ -235,7 +217,7 @@ class JxlLoader internal constructor(
     }
 }
 
-val LocalDecoder= compositionLocalOf { JxlDecoder() }
+val LocalDecoder = compositionLocalOf { JxlDecoder() }
 
 @Composable
 fun rememberJxlLoader(
@@ -248,13 +230,7 @@ fun rememberJxlLoader(
     val decoder = LocalDecoder.current
     return remember(uri, config, decodePreview, animated) {
         JxlLoader(
-            decoder,
-            context.assets,
-            context.contentResolver,
-            uri,
-            config,
-            decodePreview,
-            animated
+            decoder, context.assets, context.contentResolver, uri, config, decodePreview, animated
         )
     }
 }
