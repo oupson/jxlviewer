@@ -17,7 +17,8 @@ android {
             cmake {
                 cppFlags("-std=c++11")
                 targets("jxlreader")
-                arguments("-DANDROID_ARM_NEON=ON", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON")
+                arguments("-DANDROID_ARM_NEON=ON", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
+                        "-DCMAKE_BUILD_TYPE=Release")
             }
         }
 
