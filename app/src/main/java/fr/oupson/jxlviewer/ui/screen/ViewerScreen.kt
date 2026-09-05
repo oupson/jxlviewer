@@ -48,6 +48,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,10 +57,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -68,6 +71,11 @@ import fr.oupson.jxlviewer.R
 import fr.oupson.jxlviewer.ui.loading.JxlLoader
 import fr.oupson.jxlviewer.ui.loading.rememberJxlLoader
 import fr.oupson.jxlviewer.ui.model.ViewerViewModel
+import kotlin.math.min
+import kotlin.math.roundToInt
+
+private const val MIN_ZOOM_SCALE = 1f
+private const val MAX_ZOOM_SCALE = 8f
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -148,13 +156,37 @@ fun ViewerScreen(imageUri: Uri, backEnabled: Boolean, onBackPressed: () -> Unit)
             )
             val state by painter.state().collectAsState()
 
-            var scale by remember { mutableFloatStateOf(1f) }
-            var rotation by remember { mutableFloatStateOf(0f) }
+            var scale by remember { mutableFloatStateOf(MIN_ZOOM_SCALE) }
             var offset by remember { mutableStateOf(Offset.Zero) }
-            val transformableState = rememberTransformableState { zoomChange, offsetChange, rotationChange ->
-                scale *= zoomChange
-                rotation += rotationChange
-                offset += offsetChange
+            var containerSize by remember { mutableStateOf(IntSize.Zero) }
+            var intrinsicPx by remember { mutableStateOf(IntSize.Zero) }
+            // Panning is only allowed along an axis once the zoomed image overflows
+            // the container on that axis; along a fitted axis the image stays
+            // centered. containerSize = the full-screen Box, intrinsicPx = the
+            // decoded image in px, scale = the current zoom factor (1 = fit).
+            fun Offset.clamped(
+                container: IntSize,
+                imageIntrinsic: IntSize,
+                scale: Float
+            ): Offset {
+                if (imageIntrinsic.width <= 0 || imageIntrinsic.height <= 0) return Offset.Zero
+                val fit = min(
+                    (container.width / imageIntrinsic.width.toFloat()).coerceAtLeast(0f),
+                    (container.height / imageIntrinsic.height.toFloat()).coerceAtLeast(0f),
+                )
+                val scaledW = imageIntrinsic.width * fit * scale
+                val scaledH = imageIntrinsic.height * fit * scale
+                val maxX = (scaledW - container.width).coerceAtLeast(0f) / 2f
+                val maxY = (scaledH - container.height).coerceAtLeast(0f) / 2f
+                return Offset(x.coerceIn(-maxX, maxX), y.coerceIn(-maxY, maxY))
+            }
+            val transformableState = rememberTransformableState { zoomChange, offsetChange, _ ->
+                if (zoomChange != 1f) {
+                    scale = (scale * zoomChange).coerceIn(MIN_ZOOM_SCALE, MAX_ZOOM_SCALE)
+                }
+                if (offsetChange != Offset.Zero) {
+                    offset = (offset + offsetChange).clamped(containerSize, intrinsicPx, scale)
+                }
             }
 
             when (val s = state) {
@@ -175,25 +207,34 @@ fun ViewerScreen(imageUri: Uri, backEnabled: Boolean, onBackPressed: () -> Unit)
                     }
                 }
 
-                is JxlLoader.JxlState.Loaded -> Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {
-                            showUiElements = !showUiElements
-                        })
-                        .transformable(state = transformableState)
-                ) {
-                    Image(
-                        s.painter, contentDescription = if (name != null) {
-                            stringResource(R.string.description_a_preview_of, requireNotNull(name))
-                        } else {
-                            stringResource(R.string.description_a_preview_no_name)
-                        }, modifier = Modifier
+                is JxlLoader.JxlState.Loaded -> {
+                    LaunchedEffect(s) {
+                        val sz = s.painter.intrinsicSize
+                        if (sz.width > 0f && sz.height > 0f) {
+                            intrinsicPx = IntSize(sz.width.roundToInt(), sz.height.roundToInt())
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
                             .fillMaxSize()
-                            .graphicsLayer(
-                                scaleX = scale, scaleY = scale, rotationZ = rotation, translationX = offset.x, translationY = offset.y
-                            ), contentScale = ContentScale.Fit
-                    )
+                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {
+                                showUiElements = !showUiElements
+                            })
+                            .onSizeChanged { containerSize = it }
+                            .transformable(state = transformableState)
+                    ) {
+                        Image(
+                            s.painter, contentDescription = if (name != null) {
+                                stringResource(R.string.description_a_preview_of, requireNotNull(name))
+                            } else {
+                                stringResource(R.string.description_a_preview_no_name)
+                            }, modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer(
+                                    scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y
+                                ), contentScale = ContentScale.Fit
+                        )
+                    }
                 }
 
                 is JxlLoader.JxlState.Preview -> {
