@@ -1,15 +1,17 @@
 #include <jxl/decode.h>
 #include <jxl/decode_cxx.h>
+#include <jxl/cms.h>
 #include <jxl/resizable_parallel_runner.h>
 #include <jxl/resizable_parallel_runner_cxx.h>
 
 #include <android/bitmap.h>
+#include <thread>
+#include <algorithm>
 
 #include "Decoder.h"
 #include "Exception.h"
 #include "JniInputStream.h"
 #include "ImageOutCallbackData.h"
-#include <android/log.h>
 
 Decoder::Decoder(JNIEnv *env) : vm(nullptr) {
     env->GetJavaVM(&this->vm);
@@ -46,6 +48,61 @@ Decoder::Decoder(JNIEnv *env) : vm(nullptr) {
                 env->CallStaticObjectMethod(bitmapConfigClass, valueOfBitmapConfigFunction,
                                             rgbaF16configName)));
     }
+
+    // createBitmap(int, int, Config, boolean, ColorSpace) is an API 28+ overload.
+    // An HDR F16 bitmap must be created already tagged with its color space:
+    // re-tagging with setColorSpace() fails the platform's component range check.
+    // Below API 28 the overload does not exist -> nullptr, and the HDR path
+    // degrades gracefully to the plain SDR route.
+    this->createBitmapWithColorSpaceId = nullptr;
+    if (android_get_device_api_level() >= 28) {
+        this->createBitmapWithColorSpaceId = env->GetStaticMethodID(
+                this->bitmapClass, "createBitmap",
+                "(IILandroid/graphics/Bitmap$Config;ZLandroid/graphics/ColorSpace;)Landroid/graphics/Bitmap;");
+        if (env->ExceptionCheck() == JNI_TRUE) {
+            env->ExceptionDescribe(); env->ExceptionClear();
+            this->createBitmapWithColorSpaceId = nullptr;
+        }
+    }
+
+    // Resolve ColorSpace.Named.BT2020_PQ once so HDR bitmaps can be created already
+    // tagged with it (BT.2020 + PQ, 10000 nit reference, ICC parametric). Every
+    // failure clears the pending exception (a leaked exception would poison the
+    // next JNI call and blank the image) and degrades to the plain SDR route.
+    this->hdrColorSpaceReady = false;
+    this->colorSpaceClass = nullptr;
+    this->colorSpaceGetNamedId = nullptr;
+    this->bt2020NamedField = nullptr;
+    jclass cs = env->FindClass("android/graphics/ColorSpace");
+    if (cs == nullptr || env->ExceptionCheck() == JNI_TRUE) {
+        if (env->ExceptionCheck() == JNI_TRUE) { env->ExceptionDescribe(); env->ExceptionClear(); }
+        return;
+    }
+    this->colorSpaceClass = reinterpret_cast<jclass>(env->NewGlobalRef(cs));
+    this->colorSpaceGetNamedId = env->GetStaticMethodID(this->colorSpaceClass, "get",
+            "(Landroid/graphics/ColorSpace$Named;)Landroid/graphics/ColorSpace;");
+    if (env->ExceptionCheck() == JNI_TRUE) {
+        env->ExceptionDescribe(); env->ExceptionClear();
+        return;
+    }
+    jclass namedCls = env->FindClass("android/graphics/ColorSpace$Named");
+    if (namedCls == nullptr || env->ExceptionCheck() == JNI_TRUE) {
+        if (env->ExceptionCheck() == JNI_TRUE) { env->ExceptionDescribe(); env->ExceptionClear(); }
+        return;
+    }
+    jfieldID bt2020Field = env->GetStaticFieldID(namedCls, "BT2020_PQ",
+            "Landroid/graphics/ColorSpace$Named;");
+    if (env->ExceptionCheck() == JNI_TRUE || bt2020Field == nullptr) {
+        env->ExceptionClear();
+        return;
+    }
+    this->bt2020NamedField = env->GetStaticObjectField(namedCls, bt2020Field);
+    if (env->ExceptionCheck() == JNI_TRUE || this->bt2020NamedField == nullptr) {
+        env->ExceptionClear();
+        return;
+    }
+    this->bt2020NamedField = reinterpret_cast<jobject>(env->NewGlobalRef(this->bt2020NamedField));
+    this->hdrColorSpaceReady = true;
 }
 
 Decoder::~Decoder() {
@@ -67,6 +124,13 @@ Decoder::~Decoder() {
     env->DeleteGlobalRef(this->bitmapClass);
     env->DeleteGlobalRef(this->bitmapConfigRgbaU8);
     env->DeleteGlobalRef(this->bitmapConfigRgbaF16);
+
+    if (this->colorSpaceClass != nullptr) {
+        env->DeleteGlobalRef(this->colorSpaceClass);
+    }
+    if (this->bt2020NamedField != nullptr) {
+        env->DeleteGlobalRef(this->bt2020NamedField);
+    }
 
     env->DeleteGlobalRef(this->callbackClass);
 
@@ -169,9 +233,14 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
 
             out_data.setSize(info.xsize, info.ysize);
             out_data.setIsAlphaPremultiplied(info.alpha_premultiplied);
-            JxlResizableParallelRunnerSetThreads(runner.get(),
-                                                 JxlResizableParallelRunnerSuggestThreads(
-                                                         info.xsize, info.ysize));
+            // SuggestThreads() is resolution-based and conservative on mobile; use
+            // the hardware concurrency (capped at 8) for a faster full decode.
+            {
+                unsigned int hw = std::thread::hardware_concurrency();
+                if (hw == 0) hw = 4;
+                JxlResizableParallelRunnerSetThreads(runner.get(),
+                                                     (size_t) std::min<size_t>(hw, (size_t) 8));
+            }
 
             auto continueDecoding = env->CallBooleanMethod(callback, this->callbackOnHeaderDecoded,
                                                            info.xsize, info.ysize,
@@ -188,8 +257,54 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
                 return nbr_frames;
             }
         } else if (status == JXL_DEC_COLOR_ENCODING) {
-            if (!out_data.parseICCProfile(env, dec.get())) {
-                return -1;
+            // Hardware HDR: for HDR images (intensity_target > 0) with an F16 output,
+            // ask the decoder for BT.2020 + PQ code values referenced to 10000 nits.
+            // The bitmap is created tagged ColorSpace.Named.BT2020_PQ (the same
+            // reference), so the display stack can reproduce the absolute luminance
+            // and tone-map it to the panel peak.
+            const bool is_hdr = info.intensity_target > 0;
+            const bool use_pq_f16 = is_hdr && (btmConfigNative == BitmapConfig::F16);
+            if (use_pq_f16) {
+                JxlDecoderStatus r0 = JxlDecoderSetDesiredIntensityTarget(dec.get(), 10000.0f);
+                JxlDecoderStatus r1 = JxlDecoderSetCms(dec.get(), *JxlGetDefaultCms());
+                JxlColorEncoding pq{};
+                pq.color_space = JXL_COLOR_SPACE_RGB;
+                pq.white_point = JXL_WHITE_POINT_D65;
+                pq.primaries = JXL_PRIMARIES_2100;
+                pq.transfer_function = JXL_TRANSFER_FUNCTION_PQ;
+                pq.rendering_intent = JXL_RENDERING_INTENT_RELATIVE;
+                JxlDecoderStatus r2 =
+                    JxlDecoderSetOutputColorProfile(dec.get(), &pq, nullptr, 0);
+                if (r0 != JXL_DEC_SUCCESS || r1 != JXL_DEC_SUCCESS || r2 != JXL_DEC_SUCCESS) {
+                    jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
+                                            "HDR PQ F16 setup failed");
+                    return -1;
+                }
+                out_data.setHdrPassthrough(true);
+            } else {
+                // SDR path: let the decoder produce the ICC profile that skcms uses.
+                // HDR content requested in 8-bit is tone-mapped to sRGB.
+                if (is_hdr) {
+                    JxlDecoderStatus r0 =
+                        JxlDecoderSetDesiredIntensityTarget(dec.get(), info.intensity_target);
+                    JxlDecoderStatus r1 = JxlDecoderSetCms(dec.get(), *JxlGetDefaultCms());
+                    JxlColorEncoding srgb{};
+                    srgb.color_space = JXL_COLOR_SPACE_RGB;
+                    srgb.white_point = JXL_WHITE_POINT_D65;
+                    srgb.primaries = JXL_PRIMARIES_SRGB;
+                    srgb.transfer_function = JXL_TRANSFER_FUNCTION_SRGB;
+                    srgb.rendering_intent = JXL_RENDERING_INTENT_PERCEPTUAL;
+                    JxlDecoderStatus r2 =
+                        JxlDecoderSetOutputColorProfile(dec.get(), &srgb, nullptr, 0);
+                    if (r0 != JXL_DEC_SUCCESS || r1 != JXL_DEC_SUCCESS || r2 != JXL_DEC_SUCCESS) {
+                        jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
+                                                "HDR sRGB tone-map setup failed");
+                        return -1;
+                    }
+                }
+                if (!out_data.parseICCProfile(env, dec.get())) {
+                    return -1;
+                }
             }
         } else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
             if (!options->decodeFrames) {
@@ -201,7 +316,6 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
             }
         } else if (status == JXL_DEC_FULL_IMAGE) {
             AndroidBitmap_unlockPixels(env, btm);
-
             int delay = 0;
             if (info.have_animation) {
                 uint32_t num = (info.animation.tps_numerator == 0) ? 1
@@ -233,11 +347,48 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
                 }
 
                 if (btm == nullptr) {
-                    btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId,
-                                                      (int) out_data.getWidth(),
-                                                      (int) out_data.getHeight(), bitmapConfig);
+                    // An HDR F16 bitmap must be created already tagged with
+                    // ColorSpace.Named.BT2020_PQ: re-tagging a plain sRGB bitmap with
+                    // setColorSpace() fails the platform's component range check.
+                    const bool hdr_pq = out_data.isHdrPassthrough() && hdrColorSpaceReady &&
+                                       this->createBitmapWithColorSpaceId != nullptr;
+                    jobject hdr_cs = nullptr;
+                    if (hdr_pq) {
+                        hdr_cs = env->CallStaticObjectMethod(
+                                this->colorSpaceClass, this->colorSpaceGetNamedId,
+                                this->bt2020NamedField);
+                        if (env->ExceptionCheck() == JNI_TRUE) {
+                            env->ExceptionDescribe(); env->ExceptionClear();
+                            hdr_cs = nullptr;
+                        }
+                    }
+                    if (hdr_pq && hdr_cs != nullptr) {
+                        btm = env->CallStaticObjectMethod(bitmapClass,
+                                this->createBitmapWithColorSpaceId,
+                                (int) out_data.getWidth(),
+                                (int) out_data.getHeight(),
+                                bitmapConfig,
+                                JNI_FALSE,
+                                hdr_cs);
+                        env->DeleteLocalRef(hdr_cs);
+                    } else {
+                        btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId,
+                                                          (int) out_data.getWidth(),
+                                                          (int) out_data.getHeight(), bitmapConfig);
+                    }
                     if (env->ExceptionCheck() == JNI_TRUE) {
-                        return -1;
+                        // A bitmap creation failure must not abort the decode: clear
+                        // the exception and fall back to a plain (untagged) creation.
+                        env->ExceptionDescribe(); env->ExceptionClear();
+                        if (btm == nullptr) {
+                            btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId,
+                                                              (int) out_data.getWidth(),
+                                                              (int) out_data.getHeight(), bitmapConfig);
+                        }
+                        if (env->ExceptionCheck() == JNI_TRUE || btm == nullptr) {
+                            env->ExceptionClear();
+                            return -1;
+                        }
                     }
                 }
 

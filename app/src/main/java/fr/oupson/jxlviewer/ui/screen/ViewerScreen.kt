@@ -89,8 +89,14 @@ fun ViewerScreen(imageUri: Uri, backEnabled: Boolean, onBackPressed: () -> Unit)
 
         DisposableEffect(activity, isWideGamutSupported) {
             if (activity != null) {
-                activity.window.colorMode = ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT
-
+                // On Android 13 (S_V2), use ENHANCED (value 2) so SurfaceFlinger composites
+                // RGBA_F16 buffers in the HDR pipeline. WIDE_COLOR_GAMUT (value 1) only widens
+                // the gamut and does not trigger the HDR brightness boost.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S_V2) {
+                    activity.window.colorMode = ActivityInfo.COLOR_MODE_HDR
+                } else {
+                    activity.window.colorMode = ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT
+                }
             }
             onDispose {
                 if (activity != null) {

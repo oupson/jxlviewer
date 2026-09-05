@@ -30,6 +30,15 @@ private:
     skcms_PixelFormat outputPixelFormat;
     uint8_t sampleSize;
 
+    // HDR passthrough: when the decoder outputs BT.2020 + PQ F16 code values,
+    // copy them verbatim into the RGBA_F16 bitmap instead of running
+    // skcms_Transform, which would re-encode the values.
+    bool hdr_passthrough = false;
+    int  src_channels = 3;           // decoder output channels (RGB=3, RGBA=4)
+    int  src_bytes_per_channel = 2;  // F16 = 2
+    int  dst_channels = 4;          // RGBA_F16 bitmap channels
+    int  dst_bytes_per_channel = 2;
+
 public:
     explicit ImageOutCallbackData(BitmapConfig format) : ImageOutCallbackData(format,
                                                                               skcms_PixelFormat_RGBA_hhhh) {
@@ -48,17 +57,31 @@ public:
         this->outputPixelFormat = (format == BitmapConfig::RGBA_8888) ? skcms_PixelFormat_RGBA_8888
                                                                       : skcms_PixelFormat_RGBA_hhhh;
         this->sampleSize = (format == BitmapConfig::RGBA_8888) ? 4 : 8;
+        this->dst_channels = 4;
+        this->dst_bytes_per_channel = (format == BitmapConfig::RGBA_8888) ? 1 : 2;
     }
+
+    // Derives the decoder output channel count and bytes per channel from the
+    // source pixel format (RGB_hhh = 3ch, RGBA_hhhh = 4ch, F16 = 2B).
+    void setSourcePixelFormat(skcms_PixelFormat pixelFormat) {
+        this->sourcePixelFormat = pixelFormat;
+        switch (pixelFormat) {
+            case skcms_PixelFormat_RGB_888:  this->src_channels = 3; this->src_bytes_per_channel = 1; break;
+            case skcms_PixelFormat_RGBA_8888: this->src_channels = 4; this->src_bytes_per_channel = 1; break;
+            case skcms_PixelFormat_RGB_hhh:   this->src_channels = 3; this->src_bytes_per_channel = 2; break;
+            case skcms_PixelFormat_RGBA_hhhh: this->src_channels = 4; this->src_bytes_per_channel = 2; break;
+            default: break;
+        }
+    }
+
+    void setHdrPassthrough(bool b) { this->hdr_passthrough = b; }
+    bool isHdrPassthrough() const { return this->hdr_passthrough; }
 
     ~ImageOutCallbackData() {
         if (icc_buffer != nullptr) {
             free(icc_buffer);
             icc_buffer = nullptr;
         }
-    }
-
-    void setSourcePixelFormat(skcms_PixelFormat pixelFormat) {
-        this->sourcePixelFormat = pixelFormat;
     }
 
     size_t getWidth() const {
@@ -115,6 +138,31 @@ public:
     }
 
     void imageDataFromCallback(const void *pixels, size_t x, size_t y, size_t num_pixels) {
+        // HDR passthrough: the decoder already emitted BT.2020 + PQ F16 code
+        // values, so copy them verbatim into the RGBA_F16 bitmap.
+        if (this->hdr_passthrough) {
+            uint8_t *dst = this->image_buffer + ((y * this->width + x) * this->dst_channels * this->dst_bytes_per_channel);
+            const uint8_t *src = (const uint8_t *) pixels;
+            const int sc = this->src_channels;
+            const int sbc = this->src_bytes_per_channel;
+            const int dbc = this->dst_channels;
+            const int dsc = this->dst_bytes_per_channel;
+            for (size_t p = 0; p < num_pixels; p++) {
+                uint8_t *d = dst + p * dbc * dsc;
+                const uint8_t *s = src + p * sc * sbc;
+                for (int c = 0; c < sc; c++) {
+                    for (int b = 0; b < sbc; b++) d[c * dsc + b] = s[c * sbc + b];
+                }
+                // Pad alpha = 1.0f (F16 half 0x3C00, little-endian 00 3C)
+                if (sc < dbc) {
+                    for (int c = sc; c < dbc; c++) {
+                        d[c * dsc + 0] = 0x00;
+                        d[c * dsc + 1] = 0x3C;
+                    }
+                }
+            }
+            return;
+        }
         skcms_Transform(pixels, this->sourcePixelFormat,
                         this->is_alpha_premultiplied ? skcms_AlphaFormat_PremulAsEncoded
                                                      : skcms_AlphaFormat_Unpremul, &this->icc,

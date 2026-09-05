@@ -30,7 +30,7 @@ target_link_libraries(
         jxlreader
 
         android jnigraphics log z
-        jxl_dec jxl_threads)
+        jxl_dec jxl_cms jxl_threads)
 
 link_skcms(jxlreader)
 
