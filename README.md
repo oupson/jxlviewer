@@ -107,11 +107,35 @@ Fixes (all in the `perf` commit):
 ### Zoom sharpness
 
 The old painter down-sampled the bitmap to the canvas size on **every draw**,
-so GPU zoom enlarged an already-blurred copy. The texture now keeps the
-**native image resolution** (capped at 5× the canvas to bound GPU memory on
-8K+ sources), with `FilterQuality.High`. Up to the cap, zoom shows 1:1 real
+so GPU zoom enlarged an already-blurred copy. Textures now keep the
+**native image resolution** (sources above the ~190 MB Canvas byte budget are
+band-down-sampled once), with `FilterQuality.High`, so zoom reaches 1:1 real
 pixels. F16 bitmaps are scaled inside their source color space to avoid the
 re-tagging validation.
+
+### Seam-free tiling of large SDR images
+
+Images whose single texture would overshoot the per-texture budget
+(64 MB / 4096 px) are split into 2048 px tiles carrying a 1 px
+"bleed" ring (one extra pixel copied from each neighbor). Each tile is
+drawn with exact **float** geometry - a Compose `drawImage` under
+`withTransform { translate(x0, y0); scale(sx, sy) }` where `(x0, y0)` is the
+tile's exact source position in screen units - so every tile follows one
+continuous source->screen map and the grid lines are seamless by construction
+(verified on-device: colors across a tile boundary are identical).
+
+Two better-on-paper alternatives fail on this stack (verified on-device):
+
+- **platform `BitmapShader` local matrices** - the effective sampling is the
+  matrix inverted relative to the Skia-documented convention, and any matrix
+  that magnifies the texture relative to its rect is silently dropped /
+  rendered empty on the HWUI display list;
+- **int-geometry tiling** - per-tile rounding phases leave a visible 1 px
+  band at every grid line.
+
+F16 (HDR) bitmaps keep integer bleed-overlap tiling: a shader paint (and any
+CPU-side composite) would lose the F16 layer typing and the display stack
+would tone-map the buffer.
 
 ### Verification
 

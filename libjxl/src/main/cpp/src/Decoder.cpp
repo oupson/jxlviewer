@@ -5,6 +5,7 @@
 #include <jxl/resizable_parallel_runner_cxx.h>
 
 #include <android/bitmap.h>
+#include <memory>
 #include <thread>
 #include <algorithm>
 
@@ -143,10 +144,11 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
     BitmapConfig btmConfigNative = (options != nullptr) ? options->rgbaConfig
                                                         : BitmapConfig::RGBA_8888;
 
-    jobject bitmapConfig = (options != nullptr) ? ((options->rgbaConfig == 0)
-                                                   ? this->bitmapConfigRgbaU8
-                                                   : this->bitmapConfigRgbaF16)
-                                                : this->bitmapConfigRgbaU8;
+    // The app requests the highest capability (F16 on wide-gamut devices); the
+    // effective per-image output config is resolved at JXL_DEC_BASIC_INFO, once
+    // the intensity target is known.
+    jobject bitmapConfig = nullptr;
+    bool effectiveF16 = false;
 
 
 
@@ -183,7 +185,9 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
 
     jobject btm = nullptr;
 
-    ImageOutCallbackData out_data(btmConfigNative);
+    // Created at JXL_DEC_BASIC_INFO, once the effective output config (F16 only
+    // for real HDR content) is known.
+    std::unique_ptr<ImageOutCallbackData> out_data;
 
     JxlDecoderStatus status = JXL_DEC_NEED_MORE_INPUT;
 
@@ -213,33 +217,38 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
                 return -1;
             }
 
+            // F16 output only pays off for HDR content (intensity_target > 0):
+            // for SDR images the destination is always sRGB, so F16 would just
+            // double pixel bandwidth, skcms cost and bitmap/texture memory.
+            // Down-select SDR to 8-bit, even when the app requested F16.
+            const bool is_hdr = info.intensity_target > 0;
+            effectiveF16 = is_hdr && (btmConfigNative == BitmapConfig::F16);
+            bitmapConfig = effectiveF16 ? this->bitmapConfigRgbaF16 : this->bitmapConfigRgbaU8;
+            out_data.reset(new ImageOutCallbackData(
+                    effectiveF16 ? BitmapConfig::F16 : BitmapConfig::RGBA_8888));
+
             if (info.alpha_bits == 0) {
-                if (btmConfigNative == BitmapConfig::RGBA_8888) {
-                    out_data.setSourcePixelFormat(skcms_PixelFormat_RGB_888);
-                    format = {3, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
-                } else {
-                    out_data.setSourcePixelFormat(skcms_PixelFormat_RGB_hhh);
-                    format = {3, JXL_TYPE_FLOAT16, JXL_NATIVE_ENDIAN, 0};
-                }
+                out_data->setSourcePixelFormat(effectiveF16 ? skcms_PixelFormat_RGB_hhh
+                                                             : skcms_PixelFormat_RGB_888);
+                format = effectiveF16 ? (JxlPixelFormat) {3, JXL_TYPE_FLOAT16, JXL_NATIVE_ENDIAN, 0}
+                                      : (JxlPixelFormat) {3, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
             } else {
-                if (btmConfigNative == BitmapConfig::RGBA_8888) {
-                    out_data.setSourcePixelFormat(skcms_PixelFormat_RGBA_8888);
-                    format = {4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
-                } else {
-                    out_data.setSourcePixelFormat(skcms_PixelFormat_RGBA_hhhh);
-                    format = {4, JXL_TYPE_FLOAT16, JXL_NATIVE_ENDIAN, 0};
-                }
+                out_data->setSourcePixelFormat(effectiveF16 ? skcms_PixelFormat_RGBA_hhhh
+                                                            : skcms_PixelFormat_RGBA_8888);
+                format = effectiveF16 ? (JxlPixelFormat) {4, JXL_TYPE_FLOAT16, JXL_NATIVE_ENDIAN, 0}
+                                      : (JxlPixelFormat) {4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
             }
 
-            out_data.setSize(info.xsize, info.ysize);
-            out_data.setIsAlphaPremultiplied(info.alpha_premultiplied);
-            // SuggestThreads() is resolution-based and conservative on mobile; use
-            // the hardware concurrency (capped at 8) for a faster full decode.
+            out_data->setSize(info.xsize, info.ysize);
+            out_data->setIsAlphaPremultiplied(info.alpha_premultiplied);
+            // Decode is transform-bound; use the hardware concurrency (capped at
+            // 16) so high-resolution images decode noticeably faster than a
+            // conservative 8-thread cap.
             {
                 unsigned int hw = std::thread::hardware_concurrency();
                 if (hw == 0) hw = 4;
                 JxlResizableParallelRunnerSetThreads(runner.get(),
-                                                     (size_t) std::min<size_t>(hw, (size_t) 8));
+                                                     (size_t) std::min<size_t>(hw, (size_t) 16));
             }
 
             auto continueDecoding = env->CallBooleanMethod(callback, this->callbackOnHeaderDecoded,
@@ -263,7 +272,7 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
             // reference), so the display stack can reproduce the absolute luminance
             // and tone-map it to the panel peak.
             const bool is_hdr = info.intensity_target > 0;
-            const bool use_pq_f16 = is_hdr && (btmConfigNative == BitmapConfig::F16);
+            const bool use_pq_f16 = is_hdr && effectiveF16;
             if (use_pq_f16) {
                 JxlDecoderStatus r0 = JxlDecoderSetDesiredIntensityTarget(dec.get(), 10000.0f);
                 JxlDecoderStatus r1 = JxlDecoderSetCms(dec.get(), *JxlGetDefaultCms());
@@ -280,7 +289,7 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
                                             "HDR PQ F16 setup failed");
                     return -1;
                 }
-                out_data.setHdrPassthrough(true);
+                out_data->setHdrPassthrough(true);
             } else {
                 // SDR path: let the decoder produce the ICC profile that skcms uses.
                 // HDR content requested in 8-bit is tone-mapped to sRGB.
@@ -302,7 +311,7 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
                         return -1;
                     }
                 }
-                if (!out_data.parseICCProfile(env, dec.get())) {
+                if (!out_data->parseICCProfile(env, dec.get())) {
                     return -1;
                 }
             }
@@ -350,7 +359,7 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
                     // An HDR F16 bitmap must be created already tagged with
                     // ColorSpace.Named.BT2020_PQ: re-tagging a plain sRGB bitmap with
                     // setColorSpace() fails the platform's component range check.
-                    const bool hdr_pq = out_data.isHdrPassthrough() && hdrColorSpaceReady &&
+                    const bool hdr_pq = out_data->isHdrPassthrough() && hdrColorSpaceReady &&
                                        this->createBitmapWithColorSpaceId != nullptr;
                     jobject hdr_cs = nullptr;
                     if (hdr_pq) {
@@ -363,18 +372,23 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
                         }
                     }
                     if (hdr_pq && hdr_cs != nullptr) {
+                        // createBitmap(width, height, config, isMutable, colorSpace):
+                        // the bitmap MUST be mutable — the very next step locks its
+                        // pixels with AndroidBitmap_lockPixels, which fails on an
+                        // immutable bitmap (ANDROID_BITMAP_RESULT_BAD_PARAMS) and
+                        // aborts the whole decode for every HDR image.
                         btm = env->CallStaticObjectMethod(bitmapClass,
                                 this->createBitmapWithColorSpaceId,
-                                (int) out_data.getWidth(),
-                                (int) out_data.getHeight(),
+                                (int) out_data->getWidth(),
+                                (int) out_data->getHeight(),
                                 bitmapConfig,
-                                JNI_FALSE,
+                                JNI_TRUE,
                                 hdr_cs);
                         env->DeleteLocalRef(hdr_cs);
                     } else {
                         btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId,
-                                                          (int) out_data.getWidth(),
-                                                          (int) out_data.getHeight(), bitmapConfig);
+                                                          (int) out_data->getWidth(),
+                                                          (int) out_data->getHeight(), bitmapConfig);
                     }
                     if (env->ExceptionCheck() == JNI_TRUE) {
                         // A bitmap creation failure must not abort the decode: clear
@@ -382,8 +396,8 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
                         env->ExceptionDescribe(); env->ExceptionClear();
                         if (btm == nullptr) {
                             btm = env->CallStaticObjectMethod(bitmapClass, createBitmapMethodId,
-                                                              (int) out_data.getWidth(),
-                                                              (int) out_data.getHeight(), bitmapConfig);
+                                                              (int) out_data->getWidth(),
+                                                              (int) out_data->getHeight(), bitmapConfig);
                         }
                         if (env->ExceptionCheck() == JNI_TRUE || btm == nullptr) {
                             env->ExceptionClear();
@@ -393,7 +407,7 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
                 }
 
                 if (AndroidBitmap_lockPixels(env, btm,
-                                             reinterpret_cast<void **>(out_data.getImageBufferPtr())) !=
+                                             reinterpret_cast<void **>(out_data->getImageBufferPtr())) !=
                     ANDROID_BITMAP_RESULT_SUCCESS) {
                     jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
                                              "AndroidBitmap_lockPixels");
@@ -402,7 +416,7 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
 
                 if (JXL_DEC_SUCCESS !=
                     JxlDecoderSetImageOutCallback(dec.get(), &format, jxl_viewer_image_out_callback,
-                                                  &out_data)) {
+                                                  out_data.get())) {
                     jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
                                              "JxlDecoderSetImageOutCallback");
                     return -1;
@@ -426,7 +440,7 @@ int Decoder::DecodeJxl(JNIEnv *env, InputSource &source, Options *options, jobje
                         return nbr_frames;
                     } else {
                         if (AndroidBitmap_lockPixels(env, btm,
-                                                     reinterpret_cast<void **>(out_data.getImageBufferPtr())) !=
+                                                     reinterpret_cast<void **>(out_data->getImageBufferPtr())) !=
                             ANDROID_BITMAP_RESULT_SUCCESS) {
                             jxlviewer::throwNewError(env, METHOD_CALL_FAILED_ERROR,
                                                      "AndroidBitmap_lockPixels");

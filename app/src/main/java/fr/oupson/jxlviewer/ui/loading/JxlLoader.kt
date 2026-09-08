@@ -69,16 +69,24 @@ class JxlLoader internal constructor(
 
                 override fun onProgressiveFrame(btm: Bitmap): Boolean {
                     if (isActive) {
-                        val displayBitmap = if (this@JxlLoader.decodePreview == DecodePreview.WithoutFullImage) {
-                            btm.prepareToDraw()
+                        // Identity transform: reuse the decoder's bitmap directly
+                        // (as DecodePreview.WithoutFullImage always did) instead of
+                        // paying a full-size copy per progressive flush — a 96 MB+
+                        // memcpy for each step of a high-res image. The decoder
+                        // still owns the bitmap, so TiledPainter must not recycle
+                        // it (ownsImg = false); a non-identity transform returns a
+                        // fresh bitmap the painter owns.
+                        val identity = transformMatrix.isIdentity
+                        val displayBitmap = if (identity) {
                             btm
                         } else {
                             btm.copyBitmap(transformMatrix)
                         }
                         _state.tryEmit(
                             JxlState.Preview(
-                                ResizePainter(
-                                    displayBitmap
+                                TiledPainter(
+                                    displayBitmap,
+                                    ownsImg = !identity
                                 )
                             )
                         )
@@ -90,8 +98,12 @@ class JxlLoader internal constructor(
 
                 override fun onFrameDecoded(duration: Int, btm: Bitmap): Boolean {
                     if (isActive) {
-                        val displayBitmap = if (this@JxlLoader.decodePreview == DecodePreview.WithoutFullImage) {
-                            btm.prepareToDraw()
+                        // Terminal frame of a non-animated image with an identity
+                        // transform: the decoder is done with this bitmap, so use it
+                        // directly (skip the full-size copy) — from here on the
+                        // painter owns it. Animated frames and EXIF-rotated frames
+                        // keep the copy: the decoder reuses/keeps its bitmap.
+                        val displayBitmap = if (transformMatrix.isIdentity && !haveAnimation) {
                             btm
                         } else {
                             btm.copyBitmap(transformMatrix)
@@ -105,7 +117,10 @@ class JxlLoader internal constructor(
                             }
                             true
                         } else {
-                            _state.tryEmit(JxlState.Loaded(ResizePainter(displayBitmap)))
+                            // Tiled upload: a single GPU texture is size-capped, so a
+                            // large full-resolution image must be drawn as 2048px
+                            // tiles (with 1px bleed) or the texture upload OOMs.
+                            _state.tryEmit(JxlState.Loaded(TiledPainter(displayBitmap)))
                             false
                         }
                     } else {
