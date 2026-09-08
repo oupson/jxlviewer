@@ -77,13 +77,7 @@ fun MainScreen(initialDestination: NavKey) {
                 )
             }
             entry<ImageView> { entry ->
-                ViewerScreen(
-                    entry.uri.toUri(),
-                    backEnabled = backStack.size > 1,
-                    onBackPressed = {
-                        backStack.removeAt(backStack.lastIndex)
-                    }
-                )
+                ViewerScreen(entry.uri.toUri())
             }
         }
     )
