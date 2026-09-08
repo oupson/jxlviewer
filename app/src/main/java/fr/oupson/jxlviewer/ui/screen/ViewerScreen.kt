@@ -17,6 +17,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.TransformableState
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -184,32 +185,27 @@ fun ViewerScreen(imageUri: Uri, backEnabled: Boolean, onBackPressed: () -> Unit)
                 }
 
                 is JxlLoader.JxlState.Loaded -> {
-                    LaunchedEffect(s) {
-                        val sz = s.painter.intrinsicSize
-                        if (sz.width > 0f && sz.height > 0f) {
-                            intrinsicPx = IntSize(sz.width.roundToInt(), sz.height.roundToInt())
-                        }
-                    }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {
-                                showUiElements = !showUiElements
-                            })
-                            .onSizeChanged { containerSize = it }
-                            .transformable(state = transformableState)
-                    ) {
-                        PanZoomImage(panZoom = panZoom, painter = s.painter, name = name)
-                    }
+                    PanZoomContent(
+                        panZoom = panZoom, painter = s.painter, name = name,
+                        onContainerSize = { containerSize = it },
+                        onIntrinsicPx = { intrinsicPx = it },
+                        transformableState = transformableState,
+                        onToggleUi = { showUiElements = !showUiElements }
+                    )
                 }
 
+                // The preview uses the SAME pan/zoom box and state: the user can
+                // zoom/pan the low-res preview immediately, and the transform is
+                // carried over unchanged when the full-resolution load arrives
+                // (progressive decoding keeps the aspect ratio, so the fit box is
+                // identical).
                 is JxlLoader.JxlState.Preview -> {
-                    Image(
-                        s.painter, contentDescription = if (name != null) {
-                            stringResource(R.string.description_a_preview_of, requireNotNull(name))
-                        } else {
-                            stringResource(R.string.description_a_preview_no_name)
-                        }, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit
+                    PanZoomContent(
+                        panZoom = panZoom, painter = s.painter, name = name,
+                        onContainerSize = { containerSize = it },
+                        onIntrinsicPx = { intrinsicPx = it },
+                        transformableState = transformableState,
+                        onToggleUi = { showUiElements = !showUiElements }
                     )
                 }
             }
@@ -408,6 +404,37 @@ private fun PanZoomImage(panZoom: PanZoomState, painter: Painter, name: String?)
             ),
         contentScale = ContentScale.Fit
     )
+}
+
+@Composable
+private fun PanZoomContent(
+    panZoom: PanZoomState,
+    painter: Painter,
+    name: String?,
+    onContainerSize: (IntSize) -> Unit,
+    onIntrinsicPx: (IntSize) -> Unit,
+    transformableState: TransformableState,
+    onToggleUi: () -> Unit
+) {
+    LaunchedEffect(painter) {
+        val sz = painter.intrinsicSize
+        if (sz.width > 0f && sz.height > 0f) {
+            onIntrinsicPx(IntSize(sz.width.roundToInt(), sz.height.roundToInt()))
+        }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onToggleUi
+            )
+            .onSizeChanged { onContainerSize(it) }
+            .transformable(state = transformableState)
+    ) {
+        PanZoomImage(panZoom = panZoom, painter = painter, name = name)
+    }
 }
 
 @Composable
