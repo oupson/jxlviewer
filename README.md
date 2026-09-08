@@ -116,8 +116,13 @@ re-tagging validation.
 ### Seam-free tiling of large SDR images
 
 Images whose single texture would overshoot the per-texture budget
-(64 MB / 4096 px) are split into 2048 px tiles carrying a 1 px
-"bleed" ring (one extra pixel copied from each neighbor). Each tile is
+(64 MB / 4096 px) are split into 2048 px tiles carrying a wide
+"bleed" ring (48 px of neighbor content copied into the texture on
+each side). The GPU resample kernel when down-scaling a texture has
+support of ~3x the down-scale ratio and clamps outside the texture,
+which paints a visible seam line at every grid line; the ring keeps
+the kernel inside real content and the neighbor over-draws it with
+identical data. Each tile is
 drawn with exact **float** geometry - a Compose `drawImage` under
 `withTransform { translate(x0, y0); scale(sx, sy) }` where `(x0, y0)` is the
 tile's exact source position in screen units - so every tile follows one

@@ -419,7 +419,15 @@ class TiledPainter(
         const val TILE_SIZE = 2048
 
         /** 1px texture outset ("bleed") copied from the neighbor on each tile edge. */
-        const val BLEED = 1
+        // Texture outset on each side of a tile's nominal rect. The GPU resample
+        // kernel when down-scaling a texture (which is what every sub-1x view is)
+        // has support of roughly 3x the down-scale ratio (measured: ~8 source px
+        // of edge artifact at a 2.7:1 ratio); the kernel samples OUTSIDE the
+        // texture at its edges and clamps, painting a visible line at every grid
+        // line. A wide bleed ring keeps the kernel inside real content, and the
+        // adjacent tile over-draws the ring with identical data, so the line
+        // cannot appear. 48 covers ratios up to ~16:1 (gallery thumbnails).
+        const val BLEED = 48
 
         /** Largest dimension that may be uploaded as a single texture (the
          * smallest common GL_MAX_TEXTURE_SIZE). */
