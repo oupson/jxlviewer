@@ -6,9 +6,8 @@ import android.os.Build
 import android.util.Log
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.TransformableState
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -32,6 +31,8 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -47,6 +48,7 @@ import fr.oupson.jxlviewer.R
 import fr.oupson.jxlviewer.ui.loading.JxlLoader
 import fr.oupson.jxlviewer.ui.loading.rememberJxlLoader
 import fr.oupson.jxlviewer.ui.model.ViewerViewModel
+import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -115,20 +117,11 @@ fun ViewerScreen(imageUri: Uri) {
             )
             val state by painter.state().collectAsState()
 
-            var containerSize by remember { mutableStateOf(IntSize.Zero) }
-            var intrinsicPx by remember { mutableStateOf(IntSize.Zero) }
             // Pan/zoom state lives in a holder object: the ViewerScreen body
             // never reads scale/offset during composition, so per-gesture
             // updates only recompose the small PanZoomImage subtree instead of
-            // the whole screen (toolbar, app bar, dialogs, ...).
+            // the whole screen.
             val panZoom = remember { PanZoomState() }
-            // Panning is only allowed along an axis once the zoomed image overflows
-            // the container on that axis; along a fitted axis the image stays
-            // centered. containerSize = the full-screen Box, intrinsicPx = the
-            // decoded image in px, scale = the current zoom factor (1 = fit).
-            val transformableState = rememberTransformableState { zoomChange, offsetChange, _ ->
-                panZoom.onGesture(zoomChange, offsetChange, containerSize, intrinsicPx)
-            }
 
             when (val s = state) {
                 JxlLoader.JxlState.Empty -> {}
@@ -149,12 +142,7 @@ fun ViewerScreen(imageUri: Uri) {
                 }
 
                 is JxlLoader.JxlState.Loaded -> {
-                    PanZoomContent(
-                        panZoom = panZoom, painter = s.painter, name = name,
-                        onContainerSize = { containerSize = it },
-                        onIntrinsicPx = { intrinsicPx = it },
-                        transformableState = transformableState
-                    )
+                    PanZoomContent(panZoom = panZoom, painter = s.painter, name = name)
                 }
 
                 // The preview uses the SAME pan/zoom box and state: the user can
@@ -163,12 +151,7 @@ fun ViewerScreen(imageUri: Uri) {
                 // (progressive decoding keeps the aspect ratio, so the fit box is
                 // identical).
                 is JxlLoader.JxlState.Preview -> {
-                    PanZoomContent(
-                        panZoom = panZoom, painter = s.painter, name = name,
-                        onContainerSize = { containerSize = it },
-                        onIntrinsicPx = { intrinsicPx = it },
-                        transformableState = transformableState
-                    )
+                    PanZoomContent(panZoom = panZoom, painter = s.painter, name = name)
                 }
             }
         }
@@ -185,31 +168,56 @@ private class PanZoomState {
     val scale = mutableFloatStateOf(MIN_ZOOM_SCALE)
     val offset = mutableStateOf(Offset.Zero)
 
-    fun onGesture(
-        zoomChange: Float,
-        offsetChange: Offset,
-        container: IntSize,
-        imageIntrinsic: IntSize
-    ) {
-        // TEMP diagnostic (quiet for A/B)
-        if (zoomChange != 1f) {
-            val maxZoom = maxZoomForOriginal(container, imageIntrinsic)
-            scale.floatValue = (scale.floatValue * zoomChange).coerceIn(MIN_ZOOM_SCALE, maxZoom)
-        }
-        if (offsetChange != Offset.Zero) {
-            offset.value = (offset.value + offsetChange).clamped(container, imageIntrinsic, scale.floatValue)
-        }
+    // Updated by the composable (main thread only): the gesture viewport and
+    // the current painter's intrinsic image size in px.
+    @Volatile
+    var viewportSize: IntSize = IntSize.Zero
+    @Volatile
+    var imageIntrinsic: IntSize = IntSize.Zero
+
+    /**
+     * Pinch-zoom anchored at [centroid] (viewport px). The render transform is
+     * `screen = viewportCenter + T + s*q` (q = fit-space offset from center),
+     * so the content point q* = (P - T)/s under the pinch centroid P stays
+     * under P after zooming to z*s exactly when T' = z*T + P*(1 - z).
+     * graphicsLayer alone scales about the viewport center, which would drag
+     * content away when pinching at an edge; this correction keeps the
+     * position under the fingers stable.
+     */
+    fun onPinch(z: Float, centroid: Offset) {
+        if (viewportSize.width <= 0 || viewportSize.height <= 0) return
+        val s = scale.floatValue
+        val s2 = (s * z).coerceIn(MIN_ZOOM_SCALE, maxZoom())
+        val zActual = s2 / s
+        if (zActual == 1f) return
+        val T = offset.value
+        val center = Offset(viewportSize.width / 2f, viewportSize.height / 2f)
+        val P = centroid - center
+        val T2 = Offset(
+            T.x * zActual + P.x * (1f - zActual),
+            T.y * zActual + P.y * (1f - zActual),
+        )
+        scale.floatValue = s2
+        offset.value = T2.clamped(viewportSize, imageIntrinsic, s2)
+    }
+
+    fun onDrag(delta: Offset) {
+        if (delta == Offset.Zero) return
+        offset.value = (offset.value + delta)
+            .clamped(viewportSize, imageIntrinsic, scale.floatValue)
     }
 
     /**
-     * Max fit-scale for [imageIntrinsic] in [container], capped at
+     * Max fit-scale for the current image in the viewport, capped at
      * [ZOOM_CAP_ORIGINAL_MULT]x the *original* image resolution: at fit-scale
      * S the original is magnified by S x fit, so the cap is
      * ZOOM_CAP_ORIGINAL_MULT / fit. The result is floored at 1 so that small
      * images (which ContentScale.Fit already magnifies beyond the cap) keep a
      * valid [1, max] range, and hard-capped at [HARD_MAX_ZOOM_SCALE].
      */
-    private fun maxZoomForOriginal(container: IntSize, imageIntrinsic: IntSize): Float {
+    private fun maxZoom(): Float {
+        val container = viewportSize
+        val imageIntrinsic = imageIntrinsic
         if (imageIntrinsic.width <= 0 || imageIntrinsic.height <= 0 ||
             container.width <= 0 || container.height <= 0
         ) return HARD_MAX_ZOOM_SCALE
@@ -263,22 +271,75 @@ private fun PanZoomImage(panZoom: PanZoomState, painter: Painter, name: String?)
 private fun PanZoomContent(
     panZoom: PanZoomState,
     painter: Painter,
-    name: String?,
-    onContainerSize: (IntSize) -> Unit,
-    onIntrinsicPx: (IntSize) -> Unit,
-    transformableState: TransformableState
+    name: String?
 ) {
     LaunchedEffect(painter) {
         val sz = painter.intrinsicSize
         if (sz.width > 0f && sz.height > 0f) {
-            onIntrinsicPx(IntSize(sz.width.roundToInt(), sz.height.roundToInt()))
+            panZoom.imageIntrinsic = IntSize(sz.width.roundToInt(), sz.height.roundToInt())
         }
     }
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .onSizeChanged { onContainerSize(it) }
-            .transformable(state = transformableState)
+            .onSizeChanged { panZoom.viewportSize = it }
+            .pointerInput(panZoom) {
+                // transformable only reports the pinch zoom factor and the
+                // centroid DELTA, not the centroid's absolute position, which
+                // is needed to anchor the zoom under the fingers; so track the
+                // active pointers ourselves.
+                awaitEachGesture {
+                    val first = awaitFirstDown(requireUnconsumed = false)
+                    first.consume()
+                    val active = HashMap<PointerId, Offset>()
+                    active[first.id] = first.position
+                    var prevCentroid: Offset = first.position
+                    var prevPinchDist = 0f
+                    var prevCount = 1
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        for (c in event.changes) {
+                            if (c.pressed) active[c.id] = c.position else active.remove(c.id)
+                            c.consume()
+                        }
+                        if (active.isEmpty()) break
+                        val pointers = active.values.toList()
+                        val centroid = if (pointers.size >= 2) {
+                            Offset(
+                                (pointers[0].x + pointers[1].x) / 2f,
+                                (pointers[0].y + pointers[1].y) / 2f
+                            )
+                        } else {
+                            pointers[0]
+                        }
+                        val dist = if (pointers.size >= 2) {
+                            hypot(
+                                pointers[1].x - pointers[0].x,
+                                pointers[1].y - pointers[0].y
+                            )
+                        } else {
+                            0f
+                        }
+                        if (pointers.size != prevCount) {
+                            // Finger count changed: re-anchor so a leftover
+                            // finger after a pinch cannot produce a jump.
+                            prevCount = pointers.size
+                            prevCentroid = centroid
+                            prevPinchDist = dist
+                            continue
+                        }
+                        if (pointers.size >= 2) {
+                            if (prevPinchDist > 1f) {
+                                panZoom.onPinch(dist / prevPinchDist, centroid)
+                            }
+                            prevPinchDist = dist
+                        } else {
+                            panZoom.onDrag(centroid - prevCentroid)
+                        }
+                        prevCentroid = centroid
+                    }
+                }
+            }
     ) {
         PanZoomImage(panZoom = panZoom, painter = painter, name = name)
     }
